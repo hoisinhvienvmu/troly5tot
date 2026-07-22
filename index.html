@@ -556,9 +556,29 @@ const CAODANG_KHOA = 'Trường Cao đẳng VMU';
 const CAODANG_HOCTAP_GPA = 'Đối với hệ Cao đẳng: Sinh viên phải đạt điểm trung bình chung của cả năm học từ 7,5/10 trở lên (áp dụng đối với các cơ sở đào tạo theo niên chế) hoặc đạt điểm trung bình tích lũy từ 3,0/4,0 trở lên (áp dụng đối với các cơ sở đào tạo theo học chế tín chỉ)';
 const CAODANG_HOCTAP_GPA_TRUONG = 'Đối với Trường Cao đẳng VMU: Điểm trung bình chung năm học từ 7,5/10 trở lên (đào tạo theo niên chế); hoặc điểm tích lũy từ 3,0/4 trở lên (đào tạo theo học chế tín chỉ)';
 function isCaoDangStudent(){ return !!(state.me && state.me.khoa === CAODANG_KHOA); }
+function isCaoDangKhoa(k){ return k === CAODANG_KHOA; }
+/* Khoa/Viện của CHỦ hồ sơ — để áp dụng đúng quy định riêng của hệ Cao đẳng
+   kể cả khi người đang xem là cán bộ Trường / Khoa / Viện                  */
+function khoaOfDossier(d){
+  const pr = (d && d.student_id && state.profiles) ? state.profiles[d.student_id] : null;
+  if(pr && pr.khoa) return pr.khoa;
+  if(d && d.student_id && state.me && d.student_id === state.me.id) return state.me.khoa || null;
+  if(typeof isOfficer === 'function' && isOfficer()) return null;
+  return (state.me && state.me.khoa) || null;
+}
+/* Các nhóm yêu cầu THỰC SỰ áp dụng cho một tiêu chí.
+   Riêng Trường Cao đẳng VMU: tiêu chí "Học tập tốt" CHỈ cần điểm tích lũy
+   (bỏ nhóm "Đạt thêm ít nhất 1 trong các tiêu chí").                       */
+function groupsOf(c, khoa){
+  if(!c || !c.groups) return [];
+  const k = (khoa === undefined) ? ((state.me && state.me.khoa) || null) : khoa;
+  if(c.id === 'hoctap' && isCaoDangKhoa(k)) return c.groups.filter(g=>g.type !== 'one');
+  return c.groups;
+}
 /* Nội dung hiển thị của một yêu cầu — điều chỉnh riêng cho hệ Cao đẳng ở tiêu chí Học tập */
-function reqDisplay(critId, item, level){
-  if(isCaoDangStudent() && critId==='hoctap' && item.id==='gpa'){
+function reqDisplay(critId, item, level, khoa){
+  const cd = (khoa === undefined) ? isCaoDangStudent() : isCaoDangKhoa(khoa);
+  if(cd && critId==='hoctap' && item.id==='gpa'){
     return { t: (level==='thanhpho' ? CAODANG_HOCTAP_GPA : CAODANG_HOCTAP_GPA_TRUONG), s: '' };
   }
   return { t: item.t, s: item.s };
@@ -722,9 +742,9 @@ function reqStatusFor(evs,cid,rid){
   return 'unsat';
 }
 /* Tiêu chí đạt khi: mọi group 'all' đủ hết + mọi group 'one' có ≥1 'sat' */
-function critStatusFor(evs,c){
+function critStatusFor(evs,c,khoa){
   let satisfied=true, any=false;
-  for(const g of c.groups){
+  for(const g of groupsOf(c,khoa)){
     const sts = g.items.map(i=>reqStatusFor(evs,c.id,i.id));
     if(sts.some(s=>s!=='unsat')) any=true;
     if(g.type==='all'){ if(!sts.every(s=>s==='sat')) satisfied=false }
@@ -733,9 +753,9 @@ function critStatusFor(evs,c){
   return satisfied?'ok':(any?'part':'none');
 }
 /* % hoàn thành hồ sơ cá nhân */
-function progressFor(evs,level){
+function progressFor(evs,level,khoa){
   let tot=0, done=0;
-  for(const c of critsFor(level)) for(const g of c.groups){
+  for(const c of critsFor(level)) for(const g of groupsOf(c,khoa)){
     if(g.type==='all'){ tot+=g.items.length; done+=g.items.filter(i=>reqStatusFor(evs,c.id,i.id)==='sat').length }
     else { tot+=1; if(g.items.some(i=>reqStatusFor(evs,c.id,i.id)==='sat')) done+=1 }
   }
@@ -759,7 +779,8 @@ function ttProgressFor(evs,level){
 function dossierReady(d,evs){
   const certOK = certState(evs)!=='unsat';
   if(d.loai==='ca_nhan'){
-    const ok = critsFor(d.level).every(c=>critStatusFor(evs,c)==='ok');
+    const kd = khoaOfDossier(d);
+    const ok = critsFor(d.level).every(c=>critStatusFor(evs,c,kd)==='ok');
     return d.level==='thanhpho' ? (ok && certOK) : ok;
   }
   const ok = ttStatusFor(evs,d.level)==='ok';
@@ -833,6 +854,23 @@ function runSelfTests(){
   }));
   ok('Cá nhân TP: đủ 5 tiêu chí nhưng thiếu chứng nhận → chưa nộp được', !dossierReady(dTP,evTP));
   ok('Cá nhân TP: đủ 5 tiêu chí + chứng nhận → nộp được', dossierReady(dTP,evTP.concat([mk(CERT_CRIT,CERT_CRIT,'pending')])));
+  /* — quy định riêng Trường Cao đẳng VMU: Học tập tốt chỉ cần điểm tích lũy — */
+  const CD=CAODANG_KHOA;
+  ['truong','thanhpho'].forEach(lv=>{
+    const cHT=critsFor(lv).find(c=>c.id==='hoctap');
+    ok('Cao đẳng ('+lv+'): Học tập bỏ nhóm "chọn 1"', groupsOf(cHT,CD).every(g=>g.type!=='one'));
+    ok('Khoa khác ('+lv+'): Học tập giữ nguyên nhóm', groupsOf(cHT,'Khoa Hàng hải').length===cHT.groups.length);
+    const onlyGpa=cHT.groups.filter(g=>g.type==='all').flatMap(g=>g.items).map(i=>mk('hoctap',i.id,'approved'));
+    ok('Cao đẳng ('+lv+'): chỉ điểm tích lũy → Học tập ĐẠT', critStatusFor(onlyGpa,cHT,CD)==='ok');
+    ok('Khoa khác ('+lv+'): chỉ điểm tích lũy → chưa đạt', critStatusFor(onlyGpa,cHT,'Khoa Hàng hải')!=='ok');
+    const evCD=[]; critsFor(lv).forEach(c=>groupsOf(c,CD).forEach(g=>{
+      if(g.type==='all') g.items.forEach(i=>evCD.push(mk(c.id,i.id,'approved')));
+      else evCD.push(mk(c.id,g.items[0].id,'approved'));
+    }));
+    ok('Cao đẳng ('+lv+'): đủ nhóm áp dụng → 100%', progressFor(evCD,lv,CD)===100);
+    ok('Khoa khác ('+lv+'): cùng bộ MC đó → < 100%', progressFor(evCD,lv,'Khoa Hàng hải')<100);
+  });
+  ok('Cao đẳng: nhãn điểm tích lũy cấp Trường', /Trường Cao đẳng VMU/.test(reqDisplay('hoctap',{id:'gpa',t:'x'},'truong',CD).t));
   const failed=T.filter(t=>!t[1]).map(t=>t[0]);
   if(typeof console!=='undefined') T.forEach(([n,p])=>console.log((p?'✔ ':'✖ ')+n));
   return {total:T.length, failed};
@@ -1093,12 +1131,13 @@ function renderVoyage(){
   $('voyageWrap').classList.toggle('hide', isOfficer() || !on || !$('sec-ho-so').classList.contains('on'));
   if(!on) return;
   const evs=evsOf(d.id);
-  const p = progressFor(evs,d.level);
+  const kd = khoaOfDossier(d);
+  const p = progressFor(evs,d.level,kd);
   $('pctLabel').textContent = p+'%';
   $('trackDone').style.width = p+'%';
   $('ship').style.left = Math.max(1.5,Math.min(98.5,p))+'%';
   $('ports').innerHTML = critsOf(d).map((c,i)=>{
-    const st = critStatusFor(evs,c);
+    const st = critStatusFor(evs,c,kd);
     const moc = (i+1)*20;
     return `<div class="port ${st==='ok'?'ok':st==='part'?'part':''}" role="button" tabindex="0" aria-label="${esc(c.name)} — mốc ${moc}%" title="${esc(c.icon+' '+c.name)}" onclick="jumpCrit('${c.id}')" onkeydown="keyAct(event,this)"><span class="plabel">${moc}%</span></div>`;
   }).join('');
@@ -1179,15 +1218,16 @@ function renderCriteria(){
   let html='';
   if(d.level==='thanhpho') html+=certCardHtml(d,evs);
   if(d.loai==='ca_nhan'){
+    const kd = khoaOfDossier(d);
     html += critsOf(d).map((c,ci)=>{
-      const st = critStatusFor(evs,c);
+      const st = critStatusFor(evs,c,kd);
       const pillTxt = st==='ok'?'✔ Đủ minh chứng':st==='part'?'◐ Còn thiếu / chờ duyệt':'✖ Chưa có minh chứng';
-      const body = c.groups.map(g=>`
+      const body = groupsOf(c,kd).map(g=>`
         <div class="grouplabel">${g.type==='one'?'⭘ '+g.label:'● '+g.label}</div>
         ${g.items.map(i=>{
           const rs = reqStatusFor(evs,c.id,i.id);
           const mark = rs==='sat'?'✔':rs==='pend'?'⏳':'○';
-          const rd = reqDisplay(c.id,i,d.level);
+          const rd = reqDisplay(c.id,i,d.level,kd);
           return `<div class="req ${rs}"><div class="dot">${mark}</div><div class="rtxt">${rd.t}${rd.s?`<br><small>${rd.s}</small>`:''}</div></div>`;
         }).join('')}`).join('');
       const list = evs.filter(e=>e.crit===c.id);
@@ -1302,7 +1342,8 @@ function fillReqOptions(){
   }
   const c = findCrit(v,d.level);
   if(!c){ sel.innerHTML=''; return }
-  sel.innerHTML = c.groups.flatMap(g=>g.items.map(i=>`<option value="${i.id}">${shorten(reqDisplay(c.id,i,d.level).t,90)}</option>`)).join('');
+  const kd = khoaOfDossier(d);
+  sel.innerHTML = groupsOf(c,kd).flatMap(g=>g.items.map(i=>`<option value="${i.id}">${shorten(reqDisplay(c.id,i,d.level,kd).t,90)}</option>`)).join('');
 }
 async function saveProfile(btn){
   const upd = { full_name:$('p-name').value.trim(), mssv:($('p-mssv').value.trim()||null),
@@ -1603,8 +1644,9 @@ function critPills(d,evs){
     if(d.level==='thanhpho'){ const cs=certState(evs); s+=` <span class="pill ${cs==='sat'?'ok':cs==='pend'?'part':'none'}">🏅 CN Trường: ${cs==='sat'?'Đã duyệt':cs==='pend'?'Chờ':'Chưa có'}</span>` }
     return s;
   }
+  const kd = khoaOfDossier(d);
   let s = critsOf(d).map(c=>{
-    const st=critStatusFor(evs,c);
+    const st=critStatusFor(evs,c,kd);
     return `<span class="pill ${st==='ok'?'ok':st==='part'?'part':'none'}" title="${esc(c.name)}">${c.icon} ${st==='ok'?'Đạt':st==='part'?'Thiếu':'Chưa có'}</span>`;
   }).join(' ');
   if(d.level==='thanhpho'){ const cs=certState(evs); s+=` <span class="pill ${cs==='sat'?'ok':cs==='pend'?'part':'none'}">🏅 CN Trường: ${cs==='sat'?'Đã duyệt':cs==='pend'?'Chờ':'Chưa có'}</span>` }
@@ -1764,7 +1806,7 @@ function progBar(pct){
 function stuProgress(sid,doss){
   const d=doss.find(x=>x.student_id===sid && x.loai==='ca_nhan' && x.level==='truong');
   if(!d) return null;
-  return progressFor(state.evidence.filter(e=>e.dossier_id===d.id),'truong');
+  return progressFor(state.evidence.filter(e=>e.dossier_id===d.id),'truong',(state.profiles[sid]||{}).khoa||null);
 }
 function renderTongQuan(){
   const cy=viewCycle();
@@ -1942,7 +1984,8 @@ function renderStandards(){
   /* Lưu ý riêng cho Trường Cao đẳng VMU ở cấp Trường */
   const cdNote = `<p class="hint" style="margin:2px 0 0;padding:8px 10px;border-left:3px solid var(--navy);background:#f6f8fb;border-radius:0 6px 6px 0">
     <b>Riêng ${esc(CAODANG_KHOA)}:</b> mục <b>Học tập tốt</b> — Điểm trung bình chung năm học từ <b>7,5/10</b> trở lên (niên chế);
-    hoặc điểm tích lũy từ <b>3,0/4</b> trở lên (tín chỉ).</p>`;
+    hoặc điểm tích lũy từ <b>3,0/4</b> trở lên (tín chỉ).
+    <b>Không phải đạt thêm</b> bất kỳ tiêu chí nào khác của mục Học tập tốt.</p>`;
   /* Bảng tiêu chuẩn tập thể của một cấp */
   const ttBlock = lv => {
     const t=TT_CRITERIA[lv];
@@ -1988,8 +2031,9 @@ function renderGenReport(){
         <td>${list.length?list.map(e=>`• ${esc(e.title)} <i>(${e.status==='approved'?'đã duyệt':e.status==='pending'?'chờ duyệt':'từ chối'})</i>`).join('<br>'):'—'}</td></tr>`;
     }).join('');
   } else if(d){
+    const kdR = khoaOfDossier(d);
     rows = critsOf(d).map((c,i)=>{
-      const st = critStatusFor(evs,c);
+      const st = critStatusFor(evs,c,kdR);
       const list = evs.filter(e=>e.crit===c.id);
       return `<tr><td><b>${i+1}. ${c.name}</b></td>
         <td>${st==='ok'?'Đủ điều kiện':st==='part'?'Còn thiếu / chờ duyệt':'Chưa có minh chứng'}</td>
@@ -1999,7 +2043,7 @@ function renderGenReport(){
   const certRow = (d && d.level==='thanhpho')
     ? `<tr><td><b>🏅 Chứng nhận SV5T cấp Trường</b></td><td>${{sat:'Đã duyệt',pend:'Chờ duyệt',unsat:'Chưa tải lên'}[certState(evs)]}</td><td>${evs.filter(e=>e.crit===CERT_CRIT).map(e=>'• '+esc(e.title)).join('<br>')||'—'}</td></tr>`
     : '';
-  const done = d ? (d.loai==='ca_nhan'?progressFor(evs,d.level):ttProgressFor(evs,d.level)) : 0;
+  const done = d ? (d.loai==='ca_nhan'?progressFor(evs,d.level,khoaOfDossier(d)):ttProgressFor(evs,d.level)) : 0;
   $('reportBody').innerHTML = `
     <p style="text-align:center;font-weight:700;color:var(--navy);font-size:16px;margin-bottom:2px">BÁO CÁO TỔNG HỢP HỒ SƠ "SINH VIÊN 5 TỐT"</p>
     <p style="text-align:center;font-size:13px;color:var(--muted);margin-bottom:14px">Trường Đại học Hàng hải Việt Nam — ${cycleLabel(currentCycle())}${d?' — '+dossName(d):''}</p>
@@ -2247,7 +2291,8 @@ function genDocxBody(){
   const p=state.me||{}, d=activeDossier(), evs=d?evsOf(d.id):[];
   const SZ=24, cp=(t,o)=>wP(t,Object.assign({sz:SZ,after:30},o||{}));
   const tt = d && d.loai==='tap_the';
-  const done = d ? (tt?ttProgressFor(evs,d.level):progressFor(evs,d.level)) : 0;
+  const kdW = d ? khoaOfDossier(d) : null;
+  const done = d ? (tt?ttProgressFor(evs,d.level):progressFor(evs,d.level,kdW)) : 0;
   const W=[3300,5900];
   const info=[
     [tt?'Tập thể':'Họ và tên', tt?(d.ten_tap_the||''):(p.full_name||'')],
@@ -2283,7 +2328,7 @@ function genDocxBody(){
     });
   } else if(d){
     critsOf(d).forEach((c,i)=>{
-      const st=critStatusFor(evs,c);
+      const st=critStatusFor(evs,c,kdW);
       rows.push(wTR([
         wTC(cp('**'+(i+1)+'. '+c.name+'**'),{w:W2[0]}),
         wTC(cp(st==='ok'?'Đủ điều kiện':st==='part'?'Còn thiếu / chờ duyệt':'Chưa có minh chứng'),{w:W2[1]}),
