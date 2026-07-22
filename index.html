@@ -1703,7 +1703,6 @@ function renderTongQuan(){
     +kpi(doss.filter(d=>d.status==='submitted'&&d.level==='truong').length,'Hồ sơ chờ xét cấp Trường')
     +kpi(doss.filter(d=>d.status==='approved'&&d.level==='truong').length,'Đã đạt cấp Trường')
     +kpi(doss.filter(d=>d.status==='submitted'&&d.level==='thanhpho').length,'Hồ sơ chờ xét cấp TP')
-    +kpi(doss.filter(d=>d.status==='approved'&&d.level==='thanhpho').length,'Đã đạt cấp Thành phố')
     +(isKhoa()?'':kpi(state.requests.filter(r=>r.status==='pending').length,'Yêu cầu đại diện chờ duyệt'));
 
   const groups = isKhoa() ? [myKhoa()] : KHOA_LIST.concat([KHOA_OTHER]);
