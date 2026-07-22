@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Trợ lý 5 Tốt — ĐH Hàng hải Việt Nam</title>
+<title>Trợ lý 5 Tốt — Trường ĐH Hàng hải Việt Nam</title>
 <style>
 :root{
   --navy:#0A2C4E; --navy2:#123E6B; --navy3:#1B4E85;
@@ -596,7 +596,7 @@ const CRITERIA_TRUONG = [
  {id:'tinhnguyen', icon:'🤝', name:'Tình nguyện tốt', port:'Tình nguyện',
   groups:[
    {type:'all', label:'Đạt 1 trong 2 tiêu chuẩn', items:[
-     {id:'ngay8', t:'Tham gia ít nhất 08 ngày tình nguyện/năm Trong đó phải có tối thiểu 05 danh mục tình nguyện khác nhau', s:'Cộng dồn số ngày thực tế trong năm học. Ví dụ: Mùa hè xanh, hiến máu tình nguyện, Chủ nhật xanh, Tiếp sức mùa thi…'},
+     {id:'ngay8', t:'Tham gia ít nhất 08 ngày tình nguyện/năm. Trong đó phải có tối thiểu 05 danh mục tình nguyện khác nhau', s:'Cộng dồn số ngày thực tế trong năm học. Ví dụ: Mùa hè xanh, hiến máu tình nguyện, Chủ nhật xanh, Tiếp sức mùa thi…'},
    ]}
   ]},
  {id:'hoinhap', icon:'🌏', name:'Hội nhập tốt', port:'Hội nhập',
@@ -1942,8 +1942,8 @@ function renderStandards(){
   }</ul>`).join('');
   /* Lưu ý riêng cho Trường Cao đẳng VMU ở cấp Trường */
   const cdNote = `<p class="hint" style="margin:2px 0 0;padding:8px 10px;border-left:3px solid var(--navy);background:#f6f8fb;border-radius:0 6px 6px 0">
-    <b>Riêng ${esc(CAODANG_KHOA)}:</b> mục <b>Học tập tốt</b> thay bằng — Điểm trung bình chung năm học từ <b>7,5/10</b> trở lên (niên chế);
-    hoặc điểm tích lũy từ <b>3,0/4</b> trở lên (tín chỉ). Các tiêu chí khác giữ nguyên.</p>`;
+    <b>Riêng ${esc(CAODANG_KHOA)}:</b> mục <b>Học tập tốt</b> — Điểm trung bình chung năm học từ <b>7,5/10</b> trở lên (niên chế);
+    hoặc điểm tích lũy từ <b>3,0/4</b> trở lên (tín chỉ).</p>`;
   /* Bảng tiêu chuẩn tập thể của một cấp */
   const ttBlock = lv => {
     const t=TT_CRITERIA[lv];
