@@ -440,7 +440,10 @@ button:disabled{opacity:.55;cursor:not-allowed}
             <option value="truong">Cấp Trường — trao giấy chứng nhận</option>
             <option value="thanhpho">Cấp Thành phố — theo dõi bản cứng</option>
           </select></div>
-        <div style="align-self:end;margin-bottom:11px"><button class="btn btn-ghost btn-sm" onclick="exportTongHop()">⬇ Xuất CSV (Excel)</button></div>
+      <div style="align-self:end;margin-bottom:11px;display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn btn-ghost btn-sm" onclick="exportTongHop('ca_nhan')">⬇ Xuất CSV cá nhân</button>
+          <button class="btn btn-ghost btn-sm" onclick="exportTongHop('tap_the')">⬇ Xuất CSV tập thể</button>
+        </div>
       </div>
       <p class="mini" id="thHint" style="margin-bottom:10px"></p>
       <div class="scroll-x" id="thBox"></div>
@@ -1562,7 +1565,7 @@ function officerEvRow(e){
       <span class="pill" style="background:var(--cyan-soft);color:var(--navy2)">${m.tag}</span>
       ${dossTag(d)}
       <b>${esc(e.title)}</b>
-      <span class="est ${e.status}">${e.status==='pending'?'Chờ duyệt':e.status==='approved'?'Đã duyệt':'Từ chối'}</span>
+      <span class="est ${e.status}">${e.status==='pending'?(e.reviewed_at?'↩ Đã thu hồi · chờ duyệt lại':'Chờ duyệt'):e.status==='approved'?'Đã duyệt':'Từ chối'}</span>
       <span style="font-size:12px;color:var(--muted)">${fmtDate(e.created_at)}</span>
     </div>
     <div style="font-size:13px;color:var(--muted)">Yêu cầu: ${esc(m.reqText||'')}</div>
@@ -1579,6 +1582,9 @@ function officerEvRow(e){
       <button class="btn btn-red btn-sm" onclick="reviewEv('${e.id}','rejected','note-${e.id}',this)">Xác nhận từ chối</button>
     </div>`:''}
     ${e.status==='rejected'&&e.note?`<div style="margin-top:8px;font-size:13px;color:var(--bad)">Lý do: ${esc(e.note)}</div>`:''}
+    ${(e.status!=='pending'&&isAdmin())?`<div class="rev-actions">
+      <button class="btn btn-ghost btn-sm" onclick="revokeEv('${e.id}',this)" title="Hủy quyết định đã ghi, đưa minh chứng về trạng thái Chờ duyệt để xét lại">↩ Thu hồi quyết định</button>
+    </div>`:''}
   </div>`;
 }
 
@@ -1633,6 +1639,28 @@ async function reviewEv(id,decision,noteId,btn){
   setBusy(btn,false);
   if(error){ toast('Lỗi: '+error.message); return }
   toast(decision==='approved'?'Đã duyệt minh chứng ✔':'Đã từ chối kèm lý do');
+  await loadOfficerData(); renderAll();
+}
+/* Thu hồi quyết định đã ghi cho một minh chứng (duyệt nhầm hoặc từ chối nhầm):
+   đưa minh chứng trở về trạng thái "Chờ duyệt" để cán bộ xét lại từ đầu. */
+async function revokeEv(id,btn){
+  const e=state.evidence.find(x=>x.id===id); if(!e) return;
+  const d=dossById(e.dossier_id);
+  let msg='Thu hồi quyết định của minh chứng:\n\n"'+(e.title||'')+'"\n\n'
+        +'Minh chứng sẽ trở về trạng thái "Chờ duyệt" để cán bộ xét lại.';
+  if(d && d.status==='approved')
+    msg+='\n\n⚠️ Hồ sơ liên quan ĐÃ được công nhận — hãy rà soát lại kết quả hồ sơ sau khi thu hồi.';
+  if(!confirm(msg)) return;
+  setBusy(btn,true);
+  const {error}=await sb.rpc('review_evidence',{p_id:id,p_decision:'pending',p_note:''});
+  setBusy(btn,false);
+  if(error){
+    toast(/không hợp lệ|invalid/i.test(error.message||'')
+      ? 'Cơ sở dữ liệu chưa hỗ trợ thu hồi — hãy chạy tệp supabase-capnhat-v5.sql trong Supabase rồi thử lại.'
+      : 'Lỗi: '+error.message);
+    return;
+  }
+  toast('↩ Đã thu hồi — minh chứng trở về trạng thái Chờ duyệt');
   await loadOfficerData(); renderAll();
 }
 
@@ -1918,60 +1946,85 @@ async function kichHoatNamHoc(cy,btn){
 }
 
 /* ================= CÁN BỘ: DANH SÁCH TỔNG HỢP + CSV ================= */
-function tongHopRows(level){
+function tongHopRows(level,loai){
   const cy=viewCycle();
   return state.dossiers
-    .filter(d=>d.level===level && d.status==='approved' && d.cycle===cy)
+    .filter(d=>d.level===level && d.status==='approved' && d.cycle===cy && (!loai || d.loai===loai))
     .sort((a,b)=>new Date(a.decided_at||0)-new Date(b.decided_at||0));
+}
+/* Ô đánh dấu "đã trao giấy chứng nhận" (cấp Trường) / "đã nhận bản cứng" (cấp TP) */
+function thFlagCell(d,level){
+  const done   = level==='truong' ? d.cert_award    : d.hardcopy_received;
+  const doneAt = level==='truong' ? d.cert_award_at : d.hardcopy_at;
+  if(!isAdmin()) return `<span class="pill ${done?'ok':'part'}">${done?'✔ '+fmtDate(doneAt):'Chưa'}</span>`;
+  if(level==='truong')
+    return d.cert_award
+      ? `<span class="pill ok">✔ ${fmtDate(d.cert_award_at)}</span><br><button class="btn btn-ghost btn-sm" onclick="toggleFlag('${d.id}','cert_award',false,this)">Bỏ</button>`
+      : `<button class="btn btn-primary btn-sm" onclick="toggleFlag('${d.id}','cert_award',true,this)">✔ Đã trao</button>`;
+  return d.hardcopy_received
+    ? `<span class="pill ok">✔ ${fmtDate(d.hardcopy_at)}</span><br><button class="btn btn-ghost btn-sm" onclick="toggleFlag('${d.id}','hardcopy',false,this)">Bỏ</button>`
+    : `<button class="btn btn-primary btn-sm" onclick="toggleFlag('${d.id}','hardcopy',true,this)">✔ Đã nhận</button>`;
+}
+/* Một khối danh sách: CÁ NHÂN hoặc TẬP THỂ (tách riêng theo yêu cầu) */
+function thBlock(level,loai){
+  const tt=(loai==='tap_the');
+  const rows=tongHopRows(level,loai);
+  const flagTh = level==='truong'?'Trao giấy chứng nhận':'Bản cứng';
+  const done = rows.filter(d=>level==='truong'?d.cert_award:d.hardcopy_received).length;
+  const sub = rows.length
+    ? ` <span class="mini">· ${level==='truong'?'đã trao giấy chứng nhận':'đã nhận bản cứng'}: <b>${done}/${rows.length}</b></span>` : '';
+  const title = tt
+    ? `👥 Tập thể "Sinh viên 5 tốt" — ${rows.length} tập thể`
+    : `👤 Cá nhân "Sinh viên 5 tốt" — ${rows.length} sinh viên`;
+  const head = tt
+    ? `<tr><th>STT</th><th style="text-align:left">Tên tập thể</th><th>Số TV</th><th style="text-align:left">Đại diện</th><th>MSSV đại diện</th><th style="text-align:left">Khoa / Viện</th><th>Ngày công nhận</th><th>${flagTh}</th></tr>`
+    : `<tr><th>STT</th><th style="text-align:left">Họ và tên</th><th>MSSV</th><th>Lớp</th><th style="text-align:left">Khoa / Viện</th><th>Ngày công nhận</th><th>${flagTh}</th></tr>`;
+  const body = rows.map((d,i)=>{
+    const p=state.profiles[d.student_id]||{};
+    return tt
+      ? `<tr><td>${i+1}</td><td style="text-align:left"><b>${esc(d.ten_tap_the||'')}</b></td><td>${d.so_thanh_vien||'—'}</td><td style="text-align:left">${esc(p.full_name||'')}</td><td>${esc(p.mssv||'—')}</td><td style="text-align:left">${esc(p.khoa||'')}</td><td>${fmtDate(d.decided_at)}</td><td>${thFlagCell(d,level)}</td></tr>`
+      : `<tr><td>${i+1}</td><td style="text-align:left"><b>${esc(p.full_name||'')}</b></td><td>${esc(p.mssv||'—')}</td><td>${esc(p.class_name||'')}</td><td style="text-align:left">${esc(p.khoa||'')}</td><td>${fmtDate(d.decided_at)}</td><td>${thFlagCell(d,level)}</td></tr>`;
+  }).join('');
+  return `<h3 class="sec-h">${title}${sub}</h3>`
+    + (rows.length
+        ? `<table class="stat-table">${head}${body}</table>`
+        : `<p class="empty">Chưa có ${tt?'tập thể':'cá nhân'} nào được công nhận ở cấp này trong năm học đang xem.</p>`);
 }
 function renderTongHop(){
   const level=$('th-level').value;
-  const rows=tongHopRows(level);
   $('thHint').innerHTML = level==='truong'
-    ? `Danh sách đạt danh hiệu cấp Trường — dùng khi <b>trao giấy chứng nhận bản cứng trực tiếp</b> cho sinh viên/tập thể (không cần hồ sơ bản cứng). Đã trao: <b>${rows.filter(d=>d.cert_award).length}/${rows.length}</b>.`
-    : `Danh sách đạt danh hiệu cấp Thành phố. Đã nhận bản cứng: <b>${rows.filter(d=>d.hardcopy_received).length}/${rows.length}</b>.`;
-  if(!rows.length){ $('thBox').innerHTML='<p class="empty">Chưa có hồ sơ nào được công nhận ở cấp này trong kỳ hiện tại.</p>'; return }
-  const flagTh = level==='truong'?'Trao giấy chứng nhận':'Bản cứng';
-  const body=rows.map((d,i)=>{
-    const p=state.profiles[d.student_id]||{};
-    const name = d.loai==='tap_the' ? `👥 ${esc(d.ten_tap_the||'')}<br><span class="mini">ĐD: ${esc(p.full_name||'')}</span>` : esc(p.full_name||'');
-    const done = level==='truong' ? d.cert_award : d.hardcopy_received;
-    const doneAt = level==='truong' ? d.cert_award_at : d.hardcopy_at;
-    const flag = !isAdmin()
-      ? `<span class="pill ${done?'ok':'part'}">${done?'✔ '+fmtDate(doneAt):'Chưa'}</span>`
-      : (level==='truong'
-      ? (d.cert_award?`<span class="pill ok">✔ ${fmtDate(d.cert_award_at)}</span><br><button class="btn btn-ghost btn-sm" onclick="toggleFlag('${d.id}','cert_award',false,this)">Bỏ</button>`
-                     :`<button class="btn btn-primary btn-sm" onclick="toggleFlag('${d.id}','cert_award',true,this)">✔ Đã trao</button>`)
-      : (d.hardcopy_received?`<span class="pill ok">✔ ${fmtDate(d.hardcopy_at)}</span><br><button class="btn btn-ghost btn-sm" onclick="toggleFlag('${d.id}','hardcopy',false,this)">Bỏ</button>`
-                     :`<button class="btn btn-primary btn-sm" onclick="toggleFlag('${d.id}','hardcopy',true,this)">✔ Đã nhận</button>`));
-    return `<tr><td>${i+1}</td><td style="text-align:left">${name}</td><td>${esc(p.mssv||'—')}</td><td>${esc(p.class_name||'')}</td><td style="text-align:left">${esc(p.khoa||'')}</td><td>${LOAI_LABEL[d.loai]}</td><td>${fmtDate(d.decided_at)}</td><td>${flag}</td></tr>`;
-  }).join('');
-  $('thBox').innerHTML=`<table class="stat-table">
-    <tr><th>STT</th><th style="text-align:left">Họ tên / Tập thể</th><th>MSSV</th><th>Lớp</th><th style="text-align:left">Khoa / Viện</th><th>Loại</th><th>Ngày công nhận</th><th>${flagTh}</th></tr>
-    ${body}</table>`;
+    ? `Danh sách đạt danh hiệu <b>cấp Trường</b> — dùng khi <b>trao giấy chứng nhận bản cứng trực tiếp</b> (không cần hồ sơ bản cứng). Danh sách <b>cá nhân</b> và <b>tập thể</b> được tách riêng, xuất CSV riêng từng loại.`
+    : `Danh sách đạt danh hiệu <b>cấp Thành phố</b> — theo dõi việc thu <b>hồ sơ bản cứng</b>. Danh sách <b>cá nhân</b> và <b>tập thể</b> được tách riêng, xuất CSV riêng từng loại.`;
+  $('thBox').innerHTML = thBlock(level,'ca_nhan')
+    + '<div style="height:20px"></div>'
+    + thBlock(level,'tap_the');
 }
 function csvCell(v){ v=String(v??''); return '"'+v.replace(/"/g,'""')+'"' }
-function exportTongHop(){
+function exportTongHop(loai){
   const level=$('th-level').value;
-  const rows=tongHopRows(level);
-  if(!rows.length){ toast('Không có dữ liệu để xuất'); return }
+  const tt=(loai==='tap_the');
+  const rows=tongHopRows(level,loai);
+  if(!rows.length){ toast('Không có dữ liệu '+(tt?'tập thể':'cá nhân')+' để xuất'); return }
   const flagHead = level==='truong'?'Đã trao giấy chứng nhận':'Đã nhận bản cứng';
-  const head=['STT','Loại','Họ tên / Tập thể','Đại diện','MSSV','Lớp','Khoa / Viện','Ngày công nhận',flagHead];
+  const head = tt
+    ? ['STT','Tên tập thể','Số thành viên','Đại diện','MSSV đại diện','Lớp','Khoa / Viện','Ngày công nhận',flagHead]
+    : ['STT','Họ và tên','MSSV','Lớp','Khoa / Viện','Ngày công nhận',flagHead];
   const lines=[head.map(csvCell).join(',')];
   rows.forEach((d,i)=>{
     const p=state.profiles[d.student_id]||{};
     const flag = level==='truong' ? (d.cert_award?'Đã trao '+fmtDate(d.cert_award_at):'Chưa') : (d.hardcopy_received?'Đã nhận '+fmtDate(d.hardcopy_at):'Chưa');
-    lines.push([i+1, LOAI_LABEL[d.loai], d.loai==='tap_the'?(d.ten_tap_the||''):(p.full_name||''),
-      d.loai==='tap_the'?(p.full_name||''):'', p.mssv||'', p.class_name||'', p.khoa||'',
-      fmtDate(d.decided_at), flag].map(csvCell).join(','));
+    const r = tt
+      ? [i+1, d.ten_tap_the||'', d.so_thanh_vien||'', p.full_name||'', p.mssv||'', p.class_name||'', p.khoa||'', fmtDate(d.decided_at), flag]
+      : [i+1, p.full_name||'', p.mssv||'', p.class_name||'', p.khoa||'', fmtDate(d.decided_at), flag];
+    lines.push(r.map(csvCell).join(','));
   });
   const blob=new Blob(['\uFEFF'+lines.join('\r\n')],{type:'text/csv;charset=utf-8'});
   const a=document.createElement('a');
   a.href=URL.createObjectURL(blob);
-  a.download='SV5T-'+(level==='truong'?'cap-truong':'cap-thanh-pho')+'-'+viewCycle()+'.csv';
+  a.download='SV5T-'+(tt?'tap-the':'ca-nhan')+'-'+(level==='truong'?'cap-truong':'cap-thanh-pho')+'-'+viewCycle()+'.csv';
   document.body.appendChild(a); a.click();
   setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); },400);
-  toast('Đã xuất tệp CSV — mở bằng Excel');
+  toast('Đã xuất CSV '+(tt?'tập thể':'cá nhân')+' — mở bằng Excel');
 }
 
 /* ================= TIÊU CHUẨN ================= */
