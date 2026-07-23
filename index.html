@@ -616,7 +616,7 @@ const CRITERIA_TRUONG = [
  {id:'tinhnguyen', icon:'🤝', name:'Tình nguyện tốt', port:'Tình nguyện',
   groups:[
    {type:'all', label:'Đạt 1 trong 2 tiêu chuẩn', items:[
-     {id:'ngay8', t:'Tham gia ít nhất 08 ngày tình nguyện/năm. Trong đó phải có tối thiểu 05 danh mục tình nguyện khác nhau', s:'Cộng dồn số ngày thực tế trong năm học. Ví dụ: Mùa hè xanh, hiến máu tình nguyện, Chủ nhật xanh, Tiếp sức mùa thi…'},
+     {id:'ngay8', t:'Tham gia ít nhất 07 ngày tình nguyện/năm. Trong đó phải có tối thiểu 05 danh mục tình nguyện khác nhau', s:'Cộng dồn số ngày thực tế trong năm học. Ví dụ: Mùa hè xanh, hiến máu tình nguyện, Chủ nhật xanh, Tiếp sức mùa thi…'},
    ]}
   ]},
  {id:'hoinhap', icon:'🌏', name:'Hội nhập tốt', port:'Hội nhập',
@@ -832,7 +832,7 @@ function runSelfTests(){
   /* — hai bộ tiêu chí phải tách bạch — */
   ok('Cấp Trường ≠ cấp Thành phố', critsFor('truong')!==critsFor('thanhpho'));
   ok('Cấp Trường: Đạo đức chỉ có 1 nhóm bắt buộc', critsFor('truong')[0].groups.length===1);
-  ok('Cấp Trường: Tình nguyện yêu cầu 08 ngày', /08 ngày/.test(critsFor('truong')[3].groups[0].items[0].t));
+  ok('Cấp Trường: Tình nguyện yêu cầu 07 ngày', /07 ngày/.test(critsFor('truong')[3].groups[0].items[0].t));
   ok('Cấp TP: Đạo đức có nhóm "chọn 1"', critsFor('thanhpho')[0].groups.some(g=>g.type==='one'));
   ok('Hai cấp cùng 5 mã tiêu chí', critsFor('truong').map(c=>c.id).join()===critsFor('thanhpho').map(c=>c.id).join());
   const evTruong=[]; critsFor('truong').forEach(c=>c.groups.forEach(g=>{
