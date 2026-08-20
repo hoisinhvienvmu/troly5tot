@@ -578,6 +578,25 @@ function groupsOf(c, khoa){
   if(c.id === 'hoctap' && isCaoDangKhoa(k)) return c.groups.filter(g=>g.type !== 'one');
   return c.groups;
 }
+function isCaoDangKhoa(k){ return k === CAODANG_KHOA; }
+/* Khoa/Viện của CHỦ hồ sơ — để áp dụng đúng quy định riêng của hệ Cao đẳng
+   kể cả khi người đang xem là cán bộ Trường / Khoa / Viện                  */
+function khoaOfDossier(d){
+  const pr = (d && d.student_id && state.profiles) ? state.profiles[d.student_id] : null;
+  if(pr && pr.khoa) return pr.khoa;
+  if(d && d.student_id && state.me && d.student_id === state.me.id) return state.me.khoa || null;
+  if(typeof isOfficer === 'function' && isOfficer()) return null;
+  return (state.me && state.me.khoa) || null;
+}
+/* Các nhóm yêu cầu THỰC SỰ áp dụng cho một tiêu chí.
+   Riêng Trường Cao đẳng VMU: tiêu chí "Học tập tốt" CHỈ cần điểm tích lũy
+   (bỏ nhóm "Đạt thêm ít nhất 1 trong các tiêu chí").                       */
+function groupsOf(c, khoa){
+  if(!c || !c.groups) return [];
+  const k = (khoa === undefined) ? ((state.me && state.me.khoa) || null) : khoa;
+  if(c.id === 'hoctap' && isCaoDangKhoa(k)) return c.groups.filter(g=>g.type !== 'one');
+  return c.groups;
+}
 /* Nội dung hiển thị của một yêu cầu — điều chỉnh riêng cho hệ Cao đẳng ở tiêu chí Học tập */
 function reqDisplay(critId, item, level, khoa){
   const cd = (khoa === undefined) ? isCaoDangStudent() : isCaoDangKhoa(khoa);
@@ -1222,6 +1241,7 @@ function renderCriteria(){
   if(d.level==='thanhpho') html+=certCardHtml(d,evs);
   if(d.loai==='ca_nhan'){
     const kd = khoaOfDossier(d);
+    const kd = khoaOfDossier(d);
     html += critsOf(d).map((c,ci)=>{
       const st = critStatusFor(evs,c,kd);
       const pillTxt = st==='ok'?'✔ Đủ minh chứng':st==='part'?'◐ Còn thiếu / chờ duyệt':'✖ Chưa có minh chứng';
@@ -1345,6 +1365,7 @@ function fillReqOptions(){
   }
   const c = findCrit(v,d.level);
   if(!c){ sel.innerHTML=''; return }
+  const kd = khoaOfDossier(d);
   const kd = khoaOfDossier(d);
   sel.innerHTML = groupsOf(c,kd).flatMap(g=>g.items.map(i=>`<option value="${i.id}">${shorten(reqDisplay(c.id,i,d.level,kd).t,90)}</option>`)).join('');
 }
