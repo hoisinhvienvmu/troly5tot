@@ -1602,11 +1602,13 @@ function officerEvRow(e){
     <div class="rej-note" id="rej-${e.id}">
       <div class="field"><label for="note-${e.id}">Lý do từ chối (sinh viên sẽ nhìn thấy)</label><textarea id="note-${e.id}" rows="2" placeholder="VD: Giấy chứng nhận không ghi rõ cấp khoa trở lên, đề nghị bổ sung quyết định khen thưởng."></textarea></div>
       <button class="btn btn-red btn-sm" onclick="reviewEv('${e.id}','rejected','note-${e.id}',this)">Xác nhận từ chối</button>
-    </div>`:''}
+       </div>`:''}
     ${e.status==='rejected'&&e.note?`<div style="margin-top:8px;font-size:13px;color:var(--bad)">Lý do: ${esc(e.note)}</div>`:''}
     ${(e.status!=='pending'&&isAdmin())?`<div class="rev-actions">
       <button class="btn btn-ghost btn-sm" onclick="revokeEv('${e.id}',this)" title="Hủy quyết định đã ghi, đưa minh chứng về trạng thái Chờ duyệt để xét lại">↩ Thu hồi quyết định</button>
     </div>`:''}
+  </div>`;
+}
   </div>`;
 }
 
