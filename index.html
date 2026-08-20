@@ -802,6 +802,7 @@ function dossierReady(d,evs){
   const certOK = certState(evs)!=='unsat';
   if(d.loai==='ca_nhan'){
     const kd = khoaOfDossier(d);
+    const kd = khoaOfDossier(d);
     const ok = critsFor(d.level).every(c=>critStatusFor(evs,c,kd)==='ok');
     return d.level==='thanhpho' ? (ok && certOK) : ok;
   }
