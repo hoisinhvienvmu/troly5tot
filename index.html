@@ -802,7 +802,6 @@ function dossierReady(d,evs){
   const certOK = certState(evs)!=='unsat';
   if(d.loai==='ca_nhan'){
     const kd = khoaOfDossier(d);
-    const kd = khoaOfDossier(d);
     const ok = critsFor(d.level).every(c=>critStatusFor(evs,c,kd)==='ok');
     return d.level==='thanhpho' ? (ok && certOK) : ok;
   }
@@ -1242,7 +1241,6 @@ function renderCriteria(){
   if(d.level==='thanhpho') html+=certCardHtml(d,evs);
   if(d.loai==='ca_nhan'){
     const kd = khoaOfDossier(d);
-    const kd = khoaOfDossier(d);
     html += critsOf(d).map((c,ci)=>{
       const st = critStatusFor(evs,c,kd);
       const pillTxt = st==='ok'?'✔ Đủ minh chứng':st==='part'?'◐ Còn thiếu / chờ duyệt':'✖ Chưa có minh chứng';
@@ -1366,7 +1364,6 @@ function fillReqOptions(){
   }
   const c = findCrit(v,d.level);
   if(!c){ sel.innerHTML=''; return }
-  const kd = khoaOfDossier(d);
   const kd = khoaOfDossier(d);
   sel.innerHTML = groupsOf(c,kd).flatMap(g=>g.items.map(i=>`<option value="${i.id}">${shorten(reqDisplay(c.id,i,d.level,kd).t,90)}</option>`)).join('');
 }
@@ -1607,8 +1604,6 @@ function officerEvRow(e){
     ${(e.status!=='pending'&&isAdmin())?`<div class="rev-actions">
       <button class="btn btn-ghost btn-sm" onclick="revokeEv('${e.id}',this)" title="Hủy quyết định đã ghi, đưa minh chứng về trạng thái Chờ duyệt để xét lại">↩ Thu hồi quyết định</button>
     </div>`:''}
-  </div>`;
-}
   </div>`;
 }
 
