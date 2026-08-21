@@ -2457,7 +2457,7 @@ async function loadStudentData(){
   const uid=state.session.user.id;
   await loadNamHoc();
   const [ev,doss,req,dk]=await Promise.all([
-    sb.from('evidence').select('*').eq('student_id',uid).order('created_at',{ascending:false}),
+    sb.from('evidence').select('*').eq('student_id',uid).order('created_at',{ascending:false}).order('id',{ascending:false}),
     sb.from('dossiers').select('*').eq('student_id',uid).order('created_at',{ascending:true}),
     sb.from('yeu_cau_dai_dien').select('*').eq('student_id',uid).order('created_at',{ascending:false}),
     sb.from('dang_ky_phan_dau').select('*').eq('student_id',uid)
@@ -2481,7 +2481,7 @@ async function loadOfficerData(){
   const [pr,doss,ev,req,dk]=await Promise.all([
     sb.from('profiles').select('*'),
     sb.from('dossiers').select('*').order('submitted_at',{ascending:false}),
-    sb.from('evidence').select('*').order('created_at',{ascending:false}),
+    sb.from('evidence').select('*').order('created_at',{ascending:false}).order('id',{ascending:false}),
     sb.from('yeu_cau_dai_dien').select('*').order('created_at',{ascending:false}),
     sb.from('dang_ky_phan_dau').select('*')
   ]);
