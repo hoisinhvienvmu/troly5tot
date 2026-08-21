@@ -2453,24 +2453,39 @@ function renderAll(){
 }
 
 /* ================= TẢI DỮ LIỆU ================= */
+/* Supabase/PostgREST giới hạn số dòng trả về mỗi truy vấn (mặc định ~1000).
+   Với các bảng không lọc theo student_id (vd: toàn bộ evidence/dossiers cho
+   cán bộ Trường), nếu tổng số dòng toàn trường vượt giới hạn này, kết quả sẽ
+   bị CẮT BỚT (thường mất các bản ghi cũ hơn vì order theo created_at desc)
+   dù dữ liệu vẫn còn nguyên trong DB. Hàm dưới đây gọi lặp bằng .range() để
+   luôn lấy ĐỦ toàn bộ dữ liệu, bất kể có bao nhiêu dòng.               */
+async function fetchAllRows(buildQuery, pageSize){
+  pageSize = pageSize || 1000;
+  let all = [], from = 0;
+  while(true){
+    const { data, error } = await buildQuery().range(from, from + pageSize - 1);
+    if(error) throw error;
+    const rows = data || [];
+    all = all.concat(rows);
+    if(rows.length < pageSize) break;
+    from += pageSize;
+  }
+  return all;
+}
 async function loadStudentData(){
   const uid=state.session.user.id;
   await loadNamHoc();
   const [ev,doss,req,dk]=await Promise.all([
-    sb.from('evidence').select('*').eq('student_id',uid).order('created_at',{ascending:false}).order('id',{ascending:false}),
-    sb.from('dossiers').select('*').eq('student_id',uid).order('created_at',{ascending:true}),
-    sb.from('yeu_cau_dai_dien').select('*').eq('student_id',uid).order('created_at',{ascending:false}),
-    sb.from('dang_ky_phan_dau').select('*').eq('student_id',uid)
+    fetchAllRows(()=>sb.from('evidence').select('*').eq('student_id',uid).order('created_at',{ascending:false}).order('id',{ascending:false})),
+    fetchAllRows(()=>sb.from('dossiers').select('*').eq('student_id',uid).order('created_at',{ascending:true})),
+    fetchAllRows(()=>sb.from('yeu_cau_dai_dien').select('*').eq('student_id',uid).order('created_at',{ascending:false})),
+    fetchAllRows(()=>sb.from('dang_ky_phan_dau').select('*').eq('student_id',uid))
   ]);
-  if(ev.error) throw ev.error;
-  if(doss.error) throw doss.error;
-  if(req.error) throw req.error;
-  if(dk.error) throw dk.error;
-  state.myEvidence=ev.data||[];
-  state.myDangKy=dk.data||[];
+  state.myEvidence=ev;
+  state.myDangKy=dk;
   const cy=viewCycle();
-  state.myDossiers=(doss.data||[]).filter(d=>d.cycle===cy);
-  state.myRequests=req.data||[];
+  state.myDossiers=doss.filter(d=>d.cycle===cy);
+  state.myRequests=req;
   if(!state.myDossiers.some(d=>d.id===state.activeDossierId)){
     const pref=state.myDossiers.find(d=>d.level==='truong'&&d.loai==='ca_nhan')||state.myDossiers[0];
     state.activeDossierId=pref?pref.id:null;
@@ -2479,22 +2494,17 @@ async function loadStudentData(){
 async function loadOfficerData(){
   await loadNamHoc();
   const [pr,doss,ev,req,dk]=await Promise.all([
-    sb.from('profiles').select('*'),
-    sb.from('dossiers').select('*').order('submitted_at',{ascending:false}),
-    sb.from('evidence').select('*').order('created_at',{ascending:false}).order('id',{ascending:false}),
-    sb.from('yeu_cau_dai_dien').select('*').order('created_at',{ascending:false}),
-    sb.from('dang_ky_phan_dau').select('*')
+    fetchAllRows(()=>sb.from('profiles').select('*')),
+    fetchAllRows(()=>sb.from('dossiers').select('*').order('submitted_at',{ascending:false})),
+    fetchAllRows(()=>sb.from('evidence').select('*').order('created_at',{ascending:false}).order('id',{ascending:false})),
+    fetchAllRows(()=>sb.from('yeu_cau_dai_dien').select('*').order('created_at',{ascending:false})),
+    fetchAllRows(()=>sb.from('dang_ky_phan_dau').select('*'))
   ]);
-  if(pr.error) throw pr.error;
-  if(doss.error) throw doss.error;
-  if(ev.error) throw ev.error;
-  if(req.error) throw req.error;
-  if(dk.error) throw dk.error;
-  state.profiles={}; (pr.data||[]).forEach(p=>state.profiles[p.id]=p);
-  state.dossiers=doss.data||[];
-  state.evidence=ev.data||[];
-  state.requests=req.data||[];
-  state.dangKy=dk.data||[];
+  state.profiles={}; pr.forEach(p=>state.profiles[p.id]=p);
+  state.dossiers=doss;
+  state.evidence=ev;
+  state.requests=req;
+  state.dangKy=dk;
 }
 /* Danh sách năm học + năm học đang mở */
 async function loadNamHoc(){
