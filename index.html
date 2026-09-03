@@ -474,7 +474,6 @@ button:disabled{opacity:.55;cursor:not-allowed}
     </div>
     <div class="card">
       <h3>📦 Thống kê hệ thống &amp; dung lượng lưu trữ</h3>
-      <p class="mini" style="margin-bottom:10px">Số liệu dưới đây tính trực tiếp từ dữ liệu đã tải trong ứng dụng (không tính riêng theo năm học). Để xem <b>hạn mức gói Supabase</b> (dung lượng CSDL, băng thông, số lượt xác thực…) một cách chính xác, hãy vào <b>Supabase Dashboard → Project Settings → Usage</b> — ứng dụng này không lưu khóa quản trị Supabase nên không thể hiển thị số liệu đó an toàn tại đây.</p>
       <div class="kpis" id="sysKpiRow"></div>
       <div style="margin-top:14px">
         <button class="btn btn-ghost btn-sm" id="storageCalcBtn" onclick="calcStorageUsage(this)">📏 Tính dung lượng tệp minh chứng (bucket "minhchung")</button>
@@ -2151,7 +2150,7 @@ async function calcStorageUsage(btn){
         <div class="kpi"><b>${totalFiles}</b><span>Tệp trong bucket "minhchung"</span></div>
         <div class="kpi"><b>${mb<1?(totalBytes/1024).toFixed(0)+' KB':mb.toFixed(1)+' MB'}</b><span>Tổng dung lượng đã dùng</span></div>
       </div>
-      <p class="mini" style="margin-top:8px">Đã quét ${ids.length} thư mục sinh viên có minh chứng${errCount?` (⚠️ ${errCount} thư mục không đọc được, có thể do quyền truy cập)`:''}. Gói Supabase Free hiện giới hạn khoảng 1&nbsp;GB lưu trữ tệp — hãy đối chiếu thêm với Dashboard → Settings → Usage để có số liệu chính xác nhất (kể cả tệp mồ côi không còn gắn với minh chứng nào).</p>`;
+      <p class="mini" style="margin-top:8px">Đã quét ${ids.length} thư mục sinh viên có minh chứng${errCount?` (⚠️ ${errCount} thư mục không đọc được, có thể do quyền truy cập)`:''}.</p>`;
   } finally {
     setBusy(btn,false);
     if(hint) hint.textContent='';
