@@ -459,6 +459,31 @@ button:disabled{opacity:.55;cursor:not-allowed}
     </div>
   </section>
 
+  <!-- ============ QUẢN TRỊ: TÀI KHOẢN & HỆ THỐNG ============ -->
+  <section class="section" id="sec-he-thong" role="tabpanel">
+    <div class="notice">⚠️ Xóa <b>tài khoản sinh viên</b> sẽ xóa vĩnh viễn hồ sơ, minh chứng và mọi dữ liệu liên quan của sinh viên đó — <b>không thể hoàn tác</b>. Thao tác này chỉ xóa dữ liệu ứng dụng; để chặn hẳn việc đăng nhập lại, hãy xóa thêm tài khoản đó trong Supabase → Authentication.</div>
+    <div class="card">
+      <h3>🗑 Quản lý tài khoản sinh viên</h3>
+      <div class="filterbar">
+        <div class="field"><label for="acc-search">Tìm theo tên / MSSV / lớp</label>
+          <input id="acc-search" placeholder="Nhập để lọc…" oninput="renderAccountList()"></div>
+        <div class="field"><label for="acc-khoa">Khoa / Viện</label>
+          <select id="acc-khoa" onchange="renderAccountList()"></select></div>
+      </div>
+      <div class="scroll-x" id="accBox"></div>
+    </div>
+    <div class="card">
+      <h3>📦 Thống kê hệ thống &amp; dung lượng lưu trữ</h3>
+      <p class="mini" style="margin-bottom:10px">Số liệu dưới đây tính trực tiếp từ dữ liệu đã tải trong ứng dụng (không tính riêng theo năm học). Để xem <b>hạn mức gói Supabase</b> (dung lượng CSDL, băng thông, số lượt xác thực…) một cách chính xác, hãy vào <b>Supabase Dashboard → Project Settings → Usage</b> — ứng dụng này không lưu khóa quản trị Supabase nên không thể hiển thị số liệu đó an toàn tại đây.</p>
+      <div class="kpis" id="sysKpiRow"></div>
+      <div style="margin-top:14px">
+        <button class="btn btn-ghost btn-sm" id="storageCalcBtn" onclick="calcStorageUsage(this)">📏 Tính dung lượng tệp minh chứng (bucket "minhchung")</button>
+        <span class="mini" id="storageCalcHint" style="margin-left:8px"></span>
+      </div>
+      <div id="storageCalcResult" style="margin-top:10px"></div>
+    </div>
+  </section>
+
   <!-- ============ TIÊU CHUẨN ============ -->
   <section class="section" id="sec-tieu-chuan" role="tabpanel">
     <div class="card std">
@@ -927,6 +952,7 @@ let state = {
 };
 let bootedFor = null;
 let tqOpen = {};
+let selectedEv = new Set();
 
 const ROLE_LABEL = { student:'Sinh viên', officer:'Quản trị viên · Cấp Trường', khoa_officer:'Cán bộ Khoa / Viện' };
 const ROLE_ICON  = { student:'🎓', officer:'⚓', khoa_officer:'🏛' };
@@ -969,6 +995,7 @@ const OFFICER_TABS = [
   ['yeu-cau','Đại diện tập thể <span id="reqBadge"></span>'],
   ['tong-hop','Danh sách tổng hợp'],
   ['nam-hoc','🗓 Năm học'],
+  ['he-thong','🗑 Tài khoản &amp; Hệ thống'],
   ['tieu-chuan','Tiêu chuẩn']
 ];
 const KHOA_TABS = [
@@ -979,7 +1006,7 @@ const KHOA_TABS = [
   ['tong-hop','Danh sách đạt danh hiệu'],
   ['tieu-chuan','Tiêu chuẩn']
 ];
-const ALL_SECTIONS = ['ho-so','dai-dien','tong-quan','duyet','hoso-truong','hoso-tp','yeu-cau','tong-hop','nam-hoc','tieu-chuan','report'];
+const ALL_SECTIONS = ['ho-so','dai-dien','tong-quan','duyet','hoso-truong','hoso-tp','yeu-cau','tong-hop','nam-hoc','he-thong','tieu-chuan','report'];
 
 /* ================= KHUNG GIAO DIỆN ================= */
 function applyRoleUI(){
@@ -1576,10 +1603,11 @@ function renderStudent(){
 <script>
 /* ================= CÁN BỘ: BỘ LỌC & DÒNG HIỂN THỊ ================= */
 function fillOfficerFilters(){
-  const sel=$('f-khoa');
-  if(sel) sel.innerHTML = `<option value="">Tất cả Khoa / Viện</option>`
+  const opts = `<option value="">Tất cả Khoa / Viện</option>`
     + KHOA_LIST.map(k=>`<option value="${esc(k)}">${esc(k)}</option>`).join('')
     + `<option value="${KHOA_OTHER}">Khác / chưa chọn</option>`;
+  const sel=$('f-khoa'); if(sel) sel.innerHTML = opts;
+  const acc=$('acc-khoa'); if(acc) acc.innerHTML = opts;
 }
 function studentLine(p){
   return `<b>👤 ${esc(p.full_name||'(Chưa cập nhật tên)')}</b><span class="mini">${esc(p.mssv||'—')}${p.class_name?' · '+esc(p.class_name):''}${p.khoa?' · '+esc(p.khoa):''}</span>`;
@@ -1594,6 +1622,7 @@ function officerEvRow(e){
   const inline = e.file_kind==='img';
   return `<div class="rev-item">
     <div class="rhead">
+      ${isAdmin()?`<input type="checkbox" class="ev-check" data-id="${e.id}" ${selectedEv.has(e.id)?'checked':''} onchange="toggleEvSelect('${e.id}',this.checked)" title="Chọn để xóa hàng loạt">`:''}
       <span class="pill" style="background:var(--cyan-soft);color:var(--navy2)">${m.tag}</span>
       ${dossTag(d)}
       <b>${esc(e.title)}</b>
@@ -1648,6 +1677,17 @@ function renderReviewEvidence(){
     banner=`<div class="ro-note">🔎 Đang xem minh chứng của <b>${esc(fp.full_name||'sinh viên')}</b>${fp.mssv?' · '+esc(fp.mssv):''} — <button class="btn btn-ghost btn-sm" onclick="clearFocus()">Xem tất cả</button></div>`;
   }
   if(isPastView()) banner+=`<div class="ro-note">🔒 Dữ liệu ${esc(cycleName(viewCycle()))} — chỉ đọc.</div>`;
+  // Bỏ chọn những minh chứng không còn hiển thị trong danh sách đã lọc
+  const visIds=new Set(evs.map(e=>e.id));
+  Array.from(selectedEv).forEach(id=>{ if(!visIds.has(id)) selectedEv.delete(id) });
+  if(isAdmin()){
+    const n=selectedEv.size;
+    banner+=`<div class="rev-toolbar" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px">
+      <button class="btn btn-ghost btn-sm" onclick="selectAllEv(true)">☑ Chọn tất cả đang hiển thị</button>
+      <button class="btn btn-ghost btn-sm" onclick="selectAllEv(false)">☐ Bỏ chọn</button>
+      <button class="btn btn-red btn-sm" ${n?'':'disabled'} onclick="bulkDeleteEvidence(this)">🗑 Xóa ${n||''} minh chứng đã chọn</button>
+    </div>`;
+  }
   if(!evs.length){ box.innerHTML=banner+'<div class="card empty">Không có minh chứng nào khớp bộ lọc.</div>'; return }
   const by={}; evs.forEach(e=>{ (by[e.student_id]=by[e.student_id]||[]).push(e) });
   const order=Object.keys(by).sort((a,b)=>{
@@ -1662,6 +1702,39 @@ function renderReviewEvidence(){
     const groups=['pending','rejected','approved'].map(st=>list.filter(e=>e.status===st).map(officerEvRow).join('')).join('');
     return `<div class="stu-head">${studentLine(p)}${pc?`<span class="pill part">⏳ ${pc} chờ duyệt</span>`:'<span class="pill ok">✔ Đã xử lý hết</span>'}</div>${groups}`;
   }).join('');
+}
+function toggleEvSelect(id,checked){
+  if(checked) selectedEv.add(id); else selectedEv.delete(id);
+  renderReviewEvidence();
+}
+function selectAllEv(on){
+  const evs = state.evidence.filter(evPassFilter);
+  if(on) evs.forEach(e=>selectedEv.add(e.id));
+  else evs.forEach(e=>selectedEv.delete(e.id));
+  renderReviewEvidence();
+}
+async function bulkDeleteEvidence(btn){
+  const ids = Array.from(selectedEv);
+  if(!ids.length) return;
+  const items = ids.map(id=>state.evidence.find(e=>e.id===id)).filter(Boolean);
+  const nApproved = items.filter(e=>e.status==='approved').length;
+  let msg = `Xóa vĩnh viễn ${ids.length} minh chứng đã chọn (kèm tệp đính kèm)?\n\nThao tác này KHÔNG THỂ hoàn tác.`;
+  if(nApproved) msg += `\n\n⚠️ Trong đó có ${nApproved} minh chứng ĐÃ DUYỆT — hãy rà soát lại kết quả hồ sơ liên quan sau khi xóa.`;
+  if(!confirm(msg)) return;
+  setBusy(btn,true);
+  try{
+    const {data,error} = await sb.rpc('officer_delete_evidence',{p_ids:ids});
+    if(error) throw error;
+    const paths=(data||[]).filter(Boolean);
+    if(paths.length){ try{ await sb.storage.from('minhchung').remove(paths) }catch(_e){} }
+    selectedEv.clear();
+    toast(`🗑 Đã xóa ${ids.length} minh chứng`);
+    await loadOfficerData(); renderAll();
+  }catch(e){
+    toast(/does not exist|không hợp lệ|không tồn tại/i.test(e.message||'')
+      ? 'Cơ sở dữ liệu chưa hỗ trợ xóa minh chứng — hãy chạy tệp supabase-capnhat-v6.sql trong Supabase rồi thử lại.'
+      : 'Lỗi: '+(e.message||e));
+  } finally { setBusy(btn,false) }
 }
 async function reviewEv(id,decision,noteId,btn){
   const note = noteId ? $(noteId).value.trim() : '';
@@ -1975,6 +2048,114 @@ async function kichHoatNamHoc(cy,btn){
   state.viewCycle=cy;
   toast('Đã kích hoạt '+cycleName(cy));
   await loadOfficerData(); renderPeriod(); renderAll();
+}
+
+/* ================= QUẢN TRỊ: TÀI KHOẢN & HỆ THỐNG ================= */
+function renderAccountList(){
+  if(!isAdmin()) return;
+  const box=$('accBox'); if(!box) return;
+  const q=($('acc-search')?$('acc-search').value:'').trim().toLowerCase();
+  const fk=$('acc-khoa')?$('acc-khoa').value:'';
+  let students=Object.values(state.profiles).filter(p=>p.role==='student');
+  if(fk){ students = fk===KHOA_OTHER
+    ? students.filter(p=>!KHOA_LIST.includes(p.khoa||''))
+    : students.filter(p=>(p.khoa||'')===fk) }
+  if(q) students=students.filter(p=>
+    (p.full_name||'').toLowerCase().includes(q)
+    || (p.mssv||'').toLowerCase().includes(q)
+    || (p.class_name||'').toLowerCase().includes(q));
+  students.sort((a,b)=>(a.full_name||'').localeCompare(b.full_name||'','vi'));
+  if(!students.length){ box.innerHTML='<div class="card empty">Không có tài khoản sinh viên nào khớp bộ lọc.</div>'; return }
+  const rows=students.map(p=>{
+    const nEv=state.evidence.filter(e=>e.student_id===p.id).length;
+    const nDoss=state.dossiers.filter(d=>d.student_id===p.id).length;
+    return `<tr>
+      <td><b>${esc(p.full_name||'(chưa có tên)')}</b></td>
+      <td>${esc(p.mssv||'—')}</td>
+      <td>${esc(p.class_name||'—')}</td>
+      <td>${esc(p.khoa||'—')}</td>
+      <td>${nDoss}</td>
+      <td>${nEv}</td>
+      <td><button class="btn btn-red btn-sm" onclick="deleteStudentAccount('${p.id}',this)">🗑 Xóa tài khoản</button></td>
+    </tr>`;
+  }).join('');
+  box.innerHTML=`<p class="mini" style="margin-bottom:8px">${students.length} tài khoản sinh viên khớp bộ lọc.</p>
+    <table class="stat-table">
+    <tr><th style="text-align:left">Họ tên</th><th>MSSV</th><th>Lớp</th><th>Khoa / Viện</th><th>Số hồ sơ</th><th>Số minh chứng</th><th>Thao tác</th></tr>
+    ${rows}</table>`;
+}
+async function deleteStudentAccount(id,btn){
+  const p=state.profiles[id]; if(!p) return;
+  const msg=`Xóa VĨNH VIỄN tài khoản sinh viên:\n\n${p.full_name||'(chưa có tên)'} — ${p.mssv||'chưa có MSSV'}\n\n`
+    +`Toàn bộ hồ sơ, minh chứng và yêu cầu liên quan của sinh viên này sẽ bị xóa khỏi ứng dụng. Thao tác này KHÔNG THỂ hoàn tác.\n\n`
+    +`Lưu ý: tài khoản đăng nhập (email) vẫn còn trong Supabase Authentication — nếu muốn chặn hẳn việc đăng nhập lại, hãy xóa thêm ở đó.`;
+  if(!confirm(msg)) return;
+  if(prompt('Để xác nhận, gõ chính xác MSSV của sinh viên này rồi bấm OK:')!== (p.mssv||'')){
+    toast('Đã hủy — MSSV xác nhận không khớp.'); return;
+  }
+  setBusy(btn,true);
+  try{
+    const {data,error}=await sb.rpc('officer_delete_student',{p_student_id:id});
+    if(error) throw error;
+    const paths=(data||[]).filter(Boolean);
+    if(paths.length){ try{ await sb.storage.from('minhchung').remove(paths) }catch(_e){} }
+    toast('🗑 Đã xóa tài khoản sinh viên');
+    await loadOfficerData(); renderAll();
+  }catch(e){
+    toast(/does not exist|không hợp lệ|không tồn tại/i.test(e.message||'')
+      ? 'Cơ sở dữ liệu chưa hỗ trợ xóa tài khoản — hãy chạy tệp supabase-capnhat-v6.sql trong Supabase rồi thử lại.'
+      : 'Lỗi: '+(e.message||e));
+  } finally { setBusy(btn,false) }
+}
+function renderSysStats(){
+  if(!isAdmin()) return;
+  const row=$('sysKpiRow'); if(!row) return;
+  const students=Object.values(state.profiles).filter(p=>p.role==='student').length;
+  const officers=Object.values(state.profiles).filter(p=>p.role==='officer').length;
+  const khoaAcc=Object.values(state.profiles).filter(p=>p.role==='khoa_officer').length;
+  const nEv=state.evidence.length;
+  const nFiles=state.evidence.filter(e=>e.file_path).length;
+  const nDoss=state.dossiers.length;
+  const kpi=(n,l)=>`<div class="kpi"><b>${n}</b><span>${l}</span></div>`;
+  row.innerHTML = kpi(students,'Tài khoản sinh viên')
+    + kpi(officers+khoaAcc,'Tài khoản cán bộ (Trường + Khoa/Viện)')
+    + kpi(nDoss,'Tổng số hồ sơ (mọi năm học)')
+    + kpi(nEv,'Tổng số minh chứng (mọi năm học)')
+    + kpi(nFiles,'Số minh chứng có kèm tệp');
+}
+/* Tính dung lượng thực tế của bucket "minhchung" — quét theo từng thư mục
+   sinh viên (mỗi sinh viên = 1 thư mục) vì Supabase Storage không có API
+   liệt kê đệ quy toàn bucket. Chỉ chạy khi cán bộ bấm nút (tránh gọi API
+   quá nhiều lần mỗi khi tải lại trang).                                   */
+async function calcStorageUsage(btn){
+  const hint=$('storageCalcHint'), out=$('storageCalcResult');
+  const ids=Array.from(new Set(state.evidence.map(e=>e.student_id)));
+  if(!ids.length){ out.innerHTML='<p class="mini">Chưa có minh chứng nào được tải lên.</p>'; return }
+  setBusy(btn,true);
+  let totalBytes=0, totalFiles=0, done=0, errCount=0;
+  try{
+    for(const sid of ids){
+      done++;
+      if(hint) hint.textContent=`Đang quét ${done}/${ids.length} thư mục sinh viên…`;
+      try{
+        const {data,error}=await sb.storage.from('minhchung').list(sid,{limit:1000});
+        if(error){ errCount++; continue }
+        (data||[]).forEach(f=>{
+          const sz=f.metadata && f.metadata.size ? Number(f.metadata.size) : 0;
+          totalBytes+=sz; totalFiles++;
+        });
+      }catch(_e){ errCount++; }
+    }
+    const mb=(totalBytes/1024/1024);
+    out.innerHTML=`<div class="kpis">
+        <div class="kpi"><b>${totalFiles}</b><span>Tệp trong bucket "minhchung"</span></div>
+        <div class="kpi"><b>${mb<1?(totalBytes/1024).toFixed(0)+' KB':mb.toFixed(1)+' MB'}</b><span>Tổng dung lượng đã dùng</span></div>
+      </div>
+      <p class="mini" style="margin-top:8px">Đã quét ${ids.length} thư mục sinh viên có minh chứng${errCount?` (⚠️ ${errCount} thư mục không đọc được, có thể do quyền truy cập)`:''}. Gói Supabase Free hiện giới hạn khoảng 1&nbsp;GB lưu trữ tệp — hãy đối chiếu thêm với Dashboard → Settings → Usage để có số liệu chính xác nhất (kể cả tệp mồ côi không còn gắn với minh chứng nào).</p>`;
+  } finally {
+    setBusy(btn,false);
+    if(hint) hint.textContent='';
+  }
 }
 
 /* ================= CÁN BỘ: DANH SÁCH TỔNG HỢP + CSV ================= */
@@ -2461,6 +2642,7 @@ function renderAll(){
   } else {
     renderTongQuan(); renderReviewEvidence(); renderUniDossiers(); renderCityDossiers();
     renderYeuCau(); renderTongHop(); renderNamHoc();
+    renderAccountList(); renderSysStats();
   }
   renderStandards();
 }
@@ -2612,7 +2794,7 @@ async function doChangePass(btn){
 function resetState(){
   state={ session:null, me:null, myDossiers:[], myEvidence:[], myRequests:[], activeDossierId:null,
     profiles:{}, dossiers:[], evidence:[], requests:[], reportMode:'gen' };
-  bootedFor=null; tqOpen={};
+  bootedFor=null; tqOpen={}; selectedEv=new Set();
 }
 async function boot(session){
   if(bootedFor===session.user.id) return;
