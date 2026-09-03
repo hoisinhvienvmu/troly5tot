@@ -448,6 +448,9 @@ button:disabled{opacity:.55;cursor:not-allowed}
       <p class="mini" id="thHint" style="margin-bottom:10px"></p>
       <div class="scroll-x" id="thBox"></div>
     </div>
+    <div class="card">
+      <div class="scroll-x" id="thBangBox"></div>
+    </div>
   </section>
 
   <!-- ============ QUẢN TRỊ: NĂM HỌC ============ -->
@@ -1615,10 +1618,16 @@ function dossTag(d){
   if(!d) return '';
   return `<span class="pill info">${LOAI_LABEL[d.loai]} · ${LEVEL_LABEL[d.level]}${d.loai==='tap_the'&&d.ten_tap_the?' · '+esc(shorten(d.ten_tap_the,26)):''}</span>`;
 }
-function officerEvRow(e){
+function officerEvRow(e,ctx){
   const m=critMeta(e);
   const d=dossById(e.dossier_id);
   const inline = e.file_kind==='img';
+  /* uid: định danh riêng theo NGỮ CẢNH hiển thị (ctx) + id minh chứng.
+     Cùng một minh chứng có thể xuất hiện ở nhiều nơi (tab "Duyệt minh chứng"
+     và trong thẻ hồ sơ ở "Xét cấp Trường"/"Xét cấp TP") — nếu dùng chung id
+     "prev-<id>" ở nhiều nơi, trình duyệt chỉ tìm thấy phần tử ĐẦU TIÊN trong
+     DOM (thường nằm ở tab khác, đang ẩn) khiến ảnh không hiện ra chỗ đang xem. */
+  const uid = (ctx?ctx+'-':'')+e.id;
   return `<div class="rev-item">
     <div class="rhead">
       ${isAdmin()?`<input type="checkbox" class="ev-check" data-id="${e.id}" ${selectedEv.has(e.id)?'checked':''} onchange="toggleEvSelect('${e.id}',this.checked)" title="Chọn để xóa hàng loạt">`:''}
@@ -1629,17 +1638,17 @@ function officerEvRow(e){
       <span style="font-size:12px;color:var(--muted)">${fmtDate(e.created_at)}</span>
     </div>
     <div style="font-size:13px;color:var(--muted)">Yêu cầu: ${esc(m.reqText||'')}</div>
-    <div id="prev-${e.id}"></div>
+    <div id="prev-${uid}"></div>
     ${e.file_path
-      ? `<button class="btn btn-ghost btn-sm" onclick="viewFile('${e.file_path}','${e.file_kind}',${inline?`'prev-${e.id}'`:'null'},this)">${inline?'👁 Xem minh chứng':'📄 Mở PDF'}</button>`
+      ? `<button class="btn btn-ghost btn-sm" onclick="viewFile('${e.file_path}','${e.file_kind}',${inline?`'prev-${uid}'`:'null'},this)">${inline?'👁 Xem minh chứng':'📄 Mở PDF'}</button>`
       : '<i style="font-size:12px;color:var(--muted)">Không có tệp đính kèm</i>'}
     ${(e.status==='pending'&&isAdmin())?`<div class="rev-actions">
       <button class="btn btn-primary btn-sm" onclick="reviewEv('${e.id}','approved',null,this)">✔ Duyệt</button>
-      <button class="btn btn-red btn-sm" onclick="$('rej-${e.id}').classList.toggle('show')">✖ Từ chối…</button>
+      <button class="btn btn-red btn-sm" onclick="$('rej-${uid}').classList.toggle('show')">✖ Từ chối…</button>
     </div>
-    <div class="rej-note" id="rej-${e.id}">
-      <div class="field"><label for="note-${e.id}">Lý do từ chối (sinh viên sẽ nhìn thấy)</label><textarea id="note-${e.id}" rows="2" placeholder="VD: Giấy chứng nhận không ghi rõ cấp khoa trở lên, đề nghị bổ sung quyết định khen thưởng."></textarea></div>
-      <button class="btn btn-red btn-sm" onclick="reviewEv('${e.id}','rejected','note-${e.id}',this)">Xác nhận từ chối</button>
+    <div class="rej-note" id="rej-${uid}">
+      <div class="field"><label for="note-${uid}">Lý do từ chối (sinh viên sẽ nhìn thấy)</label><textarea id="note-${uid}" rows="2" placeholder="VD: Giấy chứng nhận không ghi rõ cấp khoa trở lên, đề nghị bổ sung quyết định khen thưởng."></textarea></div>
+      <button class="btn btn-red btn-sm" onclick="reviewEv('${e.id}','rejected','note-${uid}',this)">Xác nhận từ chối</button>
        </div>`:''}
     ${e.status==='rejected'&&e.note?`<div style="margin-top:8px;font-size:13px;color:var(--bad)">Lý do: ${esc(e.note)}</div>`:''}
     ${(e.status!=='pending'&&isAdmin())?`<div class="rev-actions">
@@ -1698,7 +1707,7 @@ function renderReviewEvidence(){
   box.innerHTML = banner + order.map(sid=>{
     const p=state.profiles[sid]||{}, list=by[sid];
     const pc=list.filter(e=>e.status==='pending').length;
-    const groups=['pending','rejected','approved'].map(st=>list.filter(e=>e.status===st).map(officerEvRow).join('')).join('');
+    const groups=['pending','rejected','approved'].map(st=>list.filter(e=>e.status===st).map(e=>officerEvRow(e,'duyet')).join('')).join('');
     return `<div class="stu-head">${studentLine(p)}${pc?`<span class="pill part">⏳ ${pc} chờ duyệt</span>`:'<span class="pill ok">✔ Đã xử lý hết</span>'}</div>${groups}`;
   }).join('');
 }
@@ -1843,7 +1852,7 @@ function dossierCardHtml(d){
     ${certLine}
     ${flagBtn(d)}
     <button class="btn btn-ghost btn-sm" style="margin-top:10px" aria-expanded="false" onclick="toggleEvList('${listId}',this,${evs.length})">📎 Xem ${evs.length} minh chứng</button>
-    <div id="${listId}" class="hide" style="margin-top:8px">${evs.map(officerEvRow).join('')||'<p class="mini">Không có minh chứng.</p>'}</div>
+    <div id="${listId}" class="hide" style="margin-top:8px">${evs.map(e=>officerEvRow(e,'doss-'+d.id)).join('')||'<p class="mini">Không có minh chứng.</p>'}</div>
     ${acts}
   </div>`;
 }
@@ -1862,6 +1871,14 @@ async function decideDoss(id,decision,noteId,btn){
   toast('Đã cập nhật hồ sơ ✔');
   await loadOfficerData(); renderAll();
 }
+/* Hiển thị một nhóm hồ sơ, tách riêng Cá nhân / Tập thể theo yêu cầu */
+function dossGroupByLoai(list){
+  const cn=list.filter(d=>d.loai==='ca_nhan'), tt=list.filter(d=>d.loai==='tap_the');
+  let h='';
+  if(cn.length) h+=`<h4 class="sec-h" style="margin-top:10px">👤 Cá nhân (${cn.length})</h4>`+cn.map(dossierCardHtml).join('');
+  if(tt.length) h+=`<h4 class="sec-h" style="margin-top:10px">👥 Tập thể (${tt.length})</h4>`+tt.map(dossierCardHtml).join('');
+  return h;
+}
 function renderUniDossiers(){
   const box=$('uniDossList');
   const cy=viewCycle();
@@ -1870,8 +1887,8 @@ function renderUniDossiers(){
   const rest=mine.filter(d=>['approved','returned'].includes(d.status));
   const badge=$('uniBadge'); if(badge) badge.textContent=act.length?`(${act.length})`:'';
   if(!act.length && !rest.length){ box.innerHTML='<div class="card empty">Chưa có hồ sơ nào được nộp xét cấp Trường.</div>'; return }
-  box.innerHTML=(act.length?`<h3 class="sec-h">⏳ Chờ xét cấp Trường (${act.length})</h3>`+act.map(dossierCardHtml).join(''):'')
-    +(rest.length?`<h3 class="sec-h">🗂 Đã xử lý</h3>`+rest.map(dossierCardHtml).join(''):'');
+  box.innerHTML=(act.length?`<h3 class="sec-h">⏳ Chờ xét cấp Trường (${act.length})</h3>`+dossGroupByLoai(act):'')
+    +(rest.length?`<h3 class="sec-h">🗂 Đã xử lý</h3>`+dossGroupByLoai(rest):'');
 }
 function renderCityDossiers(){
   const box=$('cityDossList');
@@ -2089,9 +2106,6 @@ async function deleteStudentAccount(id,btn){
     +`Toàn bộ hồ sơ, minh chứng và yêu cầu liên quan của sinh viên này sẽ bị xóa khỏi ứng dụng. Thao tác này KHÔNG THỂ hoàn tác.\n\n`
     +`Lưu ý: tài khoản đăng nhập (email) vẫn còn trong Supabase Authentication — nếu muốn chặn hẳn việc đăng nhập lại, hãy xóa thêm ở đó.`;
   if(!confirm(msg)) return;
-  if(prompt('Để xác nhận, gõ chính xác MSSV của sinh viên này rồi bấm OK:')!== (p.mssv||'')){
-    toast('Đã hủy — MSSV xác nhận không khớp.'); return;
-  }
   setBusy(btn,true);
   try{
     const {data,error}=await sb.rpc('officer_delete_student',{p_student_id:id});
@@ -2202,6 +2216,46 @@ function thBlock(level,loai){
         ? `<table class="stat-table">${head}${body}</table>`
         : `<p class="empty">Chưa có ${tt?'tập thể':'cá nhân'} nào được công nhận ở cấp này trong năm học đang xem.</p>`);
 }
+/* ---------- Bảng tổng hợp: Thông tin chung + Thành tích theo từng tiêu chí ----------
+   Thông tin chung: lấy từ hồ sơ tài khoản sinh viên đã điền (họ tên, Nam/Nữ, năm
+   sinh, dân tộc, SV năm thứ, lớp/khoa, chức vụ Đoàn-Hội, Đảng viên/Đoàn viên, SĐT).
+   Cột Thành tích của mỗi tiêu chí (Đạo đức/Học tập/Thể lực/Tình nguyện/Hội nhập):
+   liệt kê TÊN các minh chứng sinh viên đã nộp thuộc đúng tiêu chí đó.
+   Chỉ áp dụng cho hồ sơ CÁ NHÂN — hồ sơ Tập thể dùng bộ tiêu chuẩn khác (không
+   chia theo 5 nhóm này) nên không đưa vào bảng này.                              */
+function bthDash(v){ return v?esc(v):'—' }
+function bthInfoBlock(p){
+  return `<div><b>Họ và tên:</b> ${bthDash(p.full_name)}</div>`
+    +`<div><b>Nam/Nữ:</b> ${bthDash(p.gioi_tinh)}</div>`
+    +`<div><b>Năm sinh:</b> ${bthDash(p.ngay_sinh)}</div>`
+    +`<div><b>Dân tộc:</b> ${bthDash(p.dan_toc)}</div>`
+    +`<div><b>Sinh viên năm thứ:</b> ${bthDash(p.nam_thu)}</div>`
+    +`<div><b>Lớp, khoa, trường, tỉnh:</b> ${bthDash(p.class_name)}, ${bthDash(p.khoa)}, Trường ĐH Hàng hải Việt Nam, TP. Hải Phòng</div>`
+    +`<div><b>Chức vụ Đoàn, Hội:</b> ${p.chuc_vu?esc(p.chuc_vu):'—'}</div>`
+    +`<div><b>Đảng viên/Đoàn viên:</b> ${bthDash(p.doan_the)}</div>`
+    +`<div><b>Số điện thoại:</b> ${bthDash(p.sdt)}</div>`;
+}
+function bthAchCell(evs,critId){
+  const list=evs.filter(e=>e.crit===critId && e.status!=='rejected');
+  if(!list.length) return '<span class="mini" style="color:var(--muted)">—</span>';
+  return list.map((e,i)=>`<div>${i+1}. ${esc(e.title)}${e.status==='pending'?' <span class="mini">(chờ duyệt)</span>':''}</div>`).join('');
+}
+function bangTongHopHtml(level){
+  const rows=tongHopRows(level,'ca_nhan');
+  if(!rows.length) return '<p class="empty">Chưa có sinh viên nào được công nhận ở cấp này trong năm học đang xem.</p>';
+  const crits=critsFor(level);
+  const head=`<tr><th>STT</th><th style="text-align:left;min-width:230px">Thông tin chung về sinh viên</th>`
+    +crits.map(c=>`<th style="min-width:170px">${esc(c.port||c.name)}</th>`).join('')+`</tr>`;
+  const body=rows.map((d,i)=>{
+    const p=state.profiles[d.student_id]||{};
+    const evs=state.evidence.filter(e=>e.dossier_id===d.id);
+    return `<tr><td style="vertical-align:top;text-align:center">${i+1}</td>`
+      + `<td style="text-align:left;vertical-align:top">${bthInfoBlock(p)}</td>`
+      + crits.map(c=>`<td style="text-align:left;vertical-align:top;font-size:13px">${bthAchCell(evs,c.id)}</td>`).join('')
+      + `</tr>`;
+  }).join('');
+  return `<table class="stat-table" style="margin-top:6px">${head}${body}</table>`;
+}
 function renderTongHop(){
   const level=$('th-level').value;
   $('thHint').innerHTML = level==='truong'
@@ -2210,6 +2264,11 @@ function renderTongHop(){
   $('thBox').innerHTML = thBlock(level,'ca_nhan')
     + '<div style="height:20px"></div>'
     + thBlock(level,'tap_the');
+  const bb=$('thBangBox');
+  if(bb){
+    bb.innerHTML=`<h3 class="sec-h" style="margin-top:0">📊 Bảng tổng hợp thông tin &amp; thành tích — cá nhân</h3>`
+      + bangTongHopHtml(level);
+  }
 }
 function csvCell(v){ v=String(v??''); return '"'+v.replace(/"/g,'""')+'"' }
 function exportTongHop(loai){
