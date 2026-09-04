@@ -415,6 +415,12 @@ button:disabled{opacity:.55;cursor:not-allowed}
   <!-- ============ CÁN BỘ: XÉT HỒ SƠ CẤP TRƯỜNG ============ -->
   <section class="section" id="sec-hoso-truong" role="tabpanel">
     <div class="notice">Hồ sơ (cá nhân &amp; tập thể) đã <b>nộp xét cấp Trường</b>. Rà soát tổng thể rồi quyết định: <b>Công nhận đạt cấp Trường</b> hoặc <b>Trả về bổ sung</b> kèm nhận xét. Hồ sơ đạt sẽ vào <b>Danh sách tổng hợp</b> để trao giấy chứng nhận bản cứng trực tiếp cho sinh viên.</div>
+    <div class="filterbar">
+      <div class="field"><label for="ut-loai">Loại hồ sơ</label>
+        <select id="ut-loai" onchange="renderUniDossiers()">
+          <option value="">Tất cả</option><option value="ca_nhan">Cá nhân</option><option value="tap_the">Tập thể</option>
+        </select></div>
+    </div>
     <div id="uniDossList"></div>
   </section>
 
@@ -433,23 +439,31 @@ button:disabled{opacity:.55;cursor:not-allowed}
   <!-- ============ CÁN BỘ: DANH SÁCH TỔNG HỢP ============ -->
   <section class="section" id="sec-tong-hop" role="tabpanel">
     <div class="card">
-      <h3>📋 Danh sách tổng hợp hồ sơ đã công nhận</h3>
-      <div class="filterbar">
-        <div class="field"><label for="th-level">Cấp</label>
-          <select id="th-level" onchange="renderTongHop()">
-            <option value="truong">Cấp Trường — trao giấy chứng nhận</option>
-            <option value="thanhpho">Cấp Thành phố — theo dõi bản cứng</option>
-          </select></div>
-      <div style="align-self:end;margin-bottom:11px;display:flex;gap:8px;flex-wrap:wrap">
-          <button class="btn btn-ghost btn-sm" onclick="exportTongHop('ca_nhan')">⬇ Xuất CSV cá nhân</button>
-          <button class="btn btn-ghost btn-sm" onclick="exportTongHop('tap_the')">⬇ Xuất CSV tập thể</button>
-        </div>
+      <div class="field" style="max-width:340px"><label for="th-level">Cấp</label>
+        <select id="th-level" onchange="renderTongHop()">
+          <option value="truong">Cấp Trường — trao giấy chứng nhận</option>
+          <option value="thanhpho">Cấp Thành phố — theo dõi bản cứng</option>
+        </select></div>
+      <div class="auth-tabs" role="tablist" aria-label="Danh sách tổng hợp" style="max-width:620px;margin-top:14px">
+        <button id="thTabBtn-list" class="on" role="tab" aria-selected="true" onclick="switchThSubTab('list')">📋 Danh sách tổng hợp công nhận</button>
+        <button id="thTabBtn-bang" role="tab" aria-selected="false" onclick="switchThSubTab('bang')">📊 Bảng tổng hợp thông tin &amp; thành tích</button>
       </div>
-      <p class="mini" id="thHint" style="margin-bottom:10px"></p>
-      <div class="scroll-x" id="thBox"></div>
-    </div>
-    <div class="card">
-      <div class="scroll-x" id="thBangBox"></div>
+
+      <div id="thPane-list">
+        <div class="filterbar">
+          <div style="align-self:end;margin-bottom:11px;display:flex;gap:8px;flex-wrap:wrap">
+            <button class="btn btn-ghost btn-sm" onclick="exportTongHop('ca_nhan')">⬇ Xuất CSV cá nhân</button>
+            <button class="btn btn-ghost btn-sm" onclick="exportTongHop('tap_the')">⬇ Xuất CSV tập thể</button>
+          </div>
+        </div>
+        <p class="mini" id="thHint" style="margin-bottom:10px"></p>
+        <div class="scroll-x" id="thBox"></div>
+      </div>
+
+      <div id="thPane-bang" class="hide">
+        <p class="mini" style="margin:10px 0">Thông tin chung lấy từ hồ sơ tài khoản sinh viên đã điền. Các cột thành tích chỉ liệt kê minh chứng <b>đã được duyệt (approved)</b> — không cần chờ toàn bộ hồ sơ được công nhận cấp Trường. Danh sách được chia riêng theo từng Khoa/Viện.</p>
+        <div class="scroll-x" id="thBangBox"></div>
+      </div>
     </div>
   </section>
 
@@ -1871,24 +1885,22 @@ async function decideDoss(id,decision,noteId,btn){
   toast('Đã cập nhật hồ sơ ✔');
   await loadOfficerData(); renderAll();
 }
-/* Hiển thị một nhóm hồ sơ, tách riêng Cá nhân / Tập thể theo yêu cầu */
-function dossGroupByLoai(list){
-  const cn=list.filter(d=>d.loai==='ca_nhan'), tt=list.filter(d=>d.loai==='tap_the');
-  let h='';
-  if(cn.length) h+=`<h4 class="sec-h" style="margin-top:10px">👤 Cá nhân (${cn.length})</h4>`+cn.map(dossierCardHtml).join('');
-  if(tt.length) h+=`<h4 class="sec-h" style="margin-top:10px">👥 Tập thể (${tt.length})</h4>`+tt.map(dossierCardHtml).join('');
-  return h;
-}
 function renderUniDossiers(){
   const box=$('uniDossList');
   const cy=viewCycle();
-  const mine=state.dossiers.filter(d=>d.level==='truong' && d.cycle===cy);
+  const loaiSel=$('ut-loai')?$('ut-loai').value:'';
+  let mine=state.dossiers.filter(d=>d.level==='truong' && d.cycle===cy);
+  if(loaiSel) mine=mine.filter(d=>d.loai===loaiSel);
   const act=mine.filter(d=>d.status==='submitted');
   const rest=mine.filter(d=>['approved','returned'].includes(d.status));
-  const badge=$('uniBadge'); if(badge) badge.textContent=act.length?`(${act.length})`:'';
-  if(!act.length && !rest.length){ box.innerHTML='<div class="card empty">Chưa có hồ sơ nào được nộp xét cấp Trường.</div>'; return }
-  box.innerHTML=(act.length?`<h3 class="sec-h">⏳ Chờ xét cấp Trường (${act.length})</h3>`+dossGroupByLoai(act):'')
-    +(rest.length?`<h3 class="sec-h">🗂 Đã xử lý</h3>`+dossGroupByLoai(rest):'');
+  const badgeAll=state.dossiers.filter(d=>d.level==='truong' && d.cycle===cy && d.status==='submitted');
+  const badge=$('uniBadge'); if(badge) badge.textContent=badgeAll.length?`(${badgeAll.length})`:'';
+  if(!act.length && !rest.length){
+    const suf = loaiSel==='ca_nhan' ? ' (loại: cá nhân)' : loaiSel==='tap_the' ? ' (loại: tập thể)' : '';
+    box.innerHTML=`<div class="card empty">Chưa có hồ sơ nào được nộp xét cấp Trường${suf}.</div>`; return
+  }
+  box.innerHTML=(act.length?`<h3 class="sec-h">⏳ Chờ xét cấp Trường (${act.length})</h3>`+act.map(dossierCardHtml).join(''):'')
+    +(rest.length?`<h3 class="sec-h">🗂 Đã xử lý</h3>`+rest.map(dossierCardHtml).join(''):'');
 }
 function renderCityDossiers(){
   const box=$('cityDossList');
@@ -2236,25 +2248,51 @@ function bthInfoBlock(p){
     +`<div><b>Số điện thoại:</b> ${bthDash(p.sdt)}</div>`;
 }
 function bthAchCell(evs,critId){
-  const list=evs.filter(e=>e.crit===critId && e.status!=='rejected');
+  const list=evs.filter(e=>e.crit===critId && e.status==='approved');
   if(!list.length) return '<span class="mini" style="color:var(--muted)">—</span>';
-  return list.map((e,i)=>`<div>${i+1}. ${esc(e.title)}${e.status==='pending'?' <span class="mini">(chờ duyệt)</span>':''}</div>`).join('');
+  return list.map((e,i)=>`<div>${i+1}. ${esc(e.title)}</div>`).join('');
 }
 function bangTongHopHtml(level){
-  const rows=tongHopRows(level,'ca_nhan');
-  if(!rows.length) return '<p class="empty">Chưa có sinh viên nào được công nhận ở cấp này trong năm học đang xem.</p>';
+  const cy=viewCycle();
+  /* Lấy TẤT CẢ hồ sơ cá nhân ở cấp này của năm học đang xem — không lọc theo
+     status='approved' của cả hồ sơ, vì thành tích cần cập nhật ngay khi từng
+     minh chứng được duyệt, không chờ hồ sơ được công nhận. */
+  const doss=state.dossiers.filter(d=>d.level===level && d.loai==='ca_nhan' && d.cycle===cy);
+  if(!doss.length) return '<p class="empty">Chưa có hồ sơ cá nhân nào ở cấp này trong năm học đang xem.</p>';
   const crits=critsFor(level);
+  const groups={};
+  doss.forEach(d=>{
+    const p=state.profiles[d.student_id]||{};
+    const k = KHOA_LIST.includes(p.khoa||'') ? p.khoa : KHOA_OTHER;
+    (groups[k]=groups[k]||[]).push(d);
+  });
+  const order=KHOA_LIST.filter(k=>groups[k]).concat(groups[KHOA_OTHER]?[KHOA_OTHER]:[]);
   const head=`<tr><th>STT</th><th style="text-align:left;min-width:230px">Thông tin chung về sinh viên</th>`
     +crits.map(c=>`<th style="min-width:170px">${esc(c.port||c.name)}</th>`).join('')+`</tr>`;
-  const body=rows.map((d,i)=>{
-    const p=state.profiles[d.student_id]||{};
-    const evs=state.evidence.filter(e=>e.dossier_id===d.id);
-    return `<tr><td style="vertical-align:top;text-align:center">${i+1}</td>`
-      + `<td style="text-align:left;vertical-align:top">${bthInfoBlock(p)}</td>`
-      + crits.map(c=>`<td style="text-align:left;vertical-align:top;font-size:13px">${bthAchCell(evs,c.id)}</td>`).join('')
-      + `</tr>`;
+  return order.map(k=>{
+    const list=groups[k].slice().sort((a,b)=>{
+      const pa=state.profiles[a.student_id]||{}, pb=state.profiles[b.student_id]||{};
+      return (pa.full_name||'').localeCompare(pb.full_name||'','vi');
+    });
+    const body=list.map((d,i)=>{
+      const p=state.profiles[d.student_id]||{};
+      const evs=state.evidence.filter(e=>e.dossier_id===d.id);
+      return `<tr><td style="vertical-align:top;text-align:center">${i+1}</td>`
+        + `<td style="text-align:left;vertical-align:top">${bthInfoBlock(p)}</td>`
+        + crits.map(c=>`<td style="text-align:left;vertical-align:top;font-size:13px">${bthAchCell(evs,c.id)}</td>`).join('')
+        + `</tr>`;
+    }).join('');
+    const label = k===KHOA_OTHER ? 'Khác / chưa chọn Khoa-Viện' : k;
+    return `<h4 class="sec-h" style="margin-top:16px">🏛 ${esc(label)} (${list.length})</h4>`
+      + `<table class="stat-table" style="margin-top:6px">${head}${body}</table>`;
   }).join('');
-  return `<table class="stat-table" style="margin-top:6px">${head}${body}</table>`;
+}
+function switchThSubTab(which){
+  const list = which==='list';
+  $('thTabBtn-list').classList.toggle('on',list); $('thTabBtn-list').setAttribute('aria-selected',list?'true':'false');
+  $('thTabBtn-bang').classList.toggle('on',!list); $('thTabBtn-bang').setAttribute('aria-selected',list?'false':'true');
+  $('thPane-list').classList.toggle('hide',!list);
+  $('thPane-bang').classList.toggle('hide',list);
 }
 function renderTongHop(){
   const level=$('th-level').value;
@@ -2265,10 +2303,7 @@ function renderTongHop(){
     + '<div style="height:20px"></div>'
     + thBlock(level,'tap_the');
   const bb=$('thBangBox');
-  if(bb){
-    bb.innerHTML=`<h3 class="sec-h" style="margin-top:0">📊 Bảng tổng hợp thông tin &amp; thành tích — cá nhân</h3>`
-      + bangTongHopHtml(level);
-  }
+  if(bb) bb.innerHTML = bangTongHopHtml(level);
 }
 function csvCell(v){ v=String(v??''); return '"'+v.replace(/"/g,'""')+'"' }
 function exportTongHop(loai){
