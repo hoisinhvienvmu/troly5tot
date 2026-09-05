@@ -210,6 +210,13 @@ button:disabled{opacity:.55;cursor:not-allowed}
 .toggle-line{display:flex;align-items:center;gap:9px;margin-top:10px;font-size:13px;flex-wrap:wrap}
 .tw{position:relative;display:inline-flex;width:38px;height:21px;flex-shrink:0}
 .scroll-x{overflow-x:auto}
+.bang-scroll{max-height:70vh;overflow:auto;border:1px solid var(--line);border-radius:10px}
+.bang-table{table-layout:fixed;border-collapse:separate;border-spacing:0;min-width:1276px}
+.bang-table th,.bang-table td{white-space:normal;word-break:break-word;vertical-align:top}
+.bang-table thead th{position:sticky;top:0;z-index:4;background:var(--sand)}
+.bang-table th:first-child,.bang-table td:first-child{position:sticky;left:0;z-index:3;background:#fff}
+.bang-table th:nth-child(2),.bang-table td:nth-child(2){position:sticky;left:46px;z-index:3;background:#fff;box-shadow:3px 0 6px rgba(10,44,78,.10)}
+.bang-table thead th:first-child,.bang-table thead th:nth-child(2){z-index:5;background:var(--sand)}
 /* Năm học + tài khoản Khoa/Viện */
 .period select{background:rgba(255,255,255,.14);color:#fff;border:1px solid rgba(255,255,255,.32);border-radius:8px;padding:4px 8px;font:inherit;font-size:12px;font-weight:700}
 .period select option{color:#14212E;background:#fff}
@@ -461,8 +468,13 @@ button:disabled{opacity:.55;cursor:not-allowed}
       </div>
 
       <div id="thPane-bang" class="hide">
-        <p class="mini" style="margin:10px 0">Thông tin chung lấy từ hồ sơ tài khoản sinh viên đã điền. Các cột thành tích chỉ liệt kê minh chứng <b>đã được duyệt (approved)</b> — không cần chờ toàn bộ hồ sơ được công nhận cấp Trường. Danh sách được chia riêng theo từng Khoa/Viện.</p>
-        <div class="scroll-x" id="thBangBox"></div>
+        <p class="mini" style="margin:10px 0">Thông tin chung lấy từ hồ sơ tài khoản sinh viên đã điền. Các cột thành tích chỉ liệt kê minh chứng <b>đã được duyệt (approved)</b> — không cần chờ toàn bộ hồ sơ được công nhận cấp Trường.</p>
+        <div class="filterbar">
+          <div class="field" style="max-width:360px"><label for="th-khoa">Khoa / Viện</label>
+            <select id="th-khoa" onchange="renderBangTongHopOnly()"></select></div>
+        </div>
+        <p class="mini" style="margin:2px 0 10px;color:var(--muted)">💡 Bảng cuộn được cả ngang lẫn dọc; cột <b>STT</b> và <b>Thông tin chung</b> luôn cố định bên trái, dòng tiêu đề luôn cố định phía trên để dễ đối chiếu.</p>
+        <div class="scroll-x bang-scroll" id="thBangBox"></div>
       </div>
     </div>
   </section>
@@ -2252,40 +2264,63 @@ function bthAchCell(evs,critId){
   if(!list.length) return '<span class="mini" style="color:var(--muted)">—</span>';
   return list.map((e,i)=>`<div>${i+1}. ${esc(e.title)}</div>`).join('');
 }
-function bangTongHopHtml(level){
+/* Nhóm hồ sơ cá nhân theo Khoa/Viện cho một cấp + năm học đang xem — không lọc
+   theo status='approved' của cả hồ sơ, vì thành tích cần cập nhật ngay khi
+   từng minh chứng được duyệt, không chờ hồ sơ được công nhận. */
+function bangTongHopGroups(level){
   const cy=viewCycle();
-  /* Lấy TẤT CẢ hồ sơ cá nhân ở cấp này của năm học đang xem — không lọc theo
-     status='approved' của cả hồ sơ, vì thành tích cần cập nhật ngay khi từng
-     minh chứng được duyệt, không chờ hồ sơ được công nhận. */
   const doss=state.dossiers.filter(d=>d.level===level && d.loai==='ca_nhan' && d.cycle===cy);
-  if(!doss.length) return '<p class="empty">Chưa có hồ sơ cá nhân nào ở cấp này trong năm học đang xem.</p>';
-  const crits=critsFor(level);
   const groups={};
   doss.forEach(d=>{
     const p=state.profiles[d.student_id]||{};
     const k = KHOA_LIST.includes(p.khoa||'') ? p.khoa : KHOA_OTHER;
     (groups[k]=groups[k]||[]).push(d);
   });
-  const order=KHOA_LIST.filter(k=>groups[k]).concat(groups[KHOA_OTHER]?[KHOA_OTHER]:[]);
-  const head=`<tr><th>STT</th><th style="text-align:left;min-width:230px">Thông tin chung về sinh viên</th>`
-    +crits.map(c=>`<th style="min-width:170px">${esc(c.port||c.name)}</th>`).join('')+`</tr>`;
-  return order.map(k=>{
-    const list=groups[k].slice().sort((a,b)=>{
-      const pa=state.profiles[a.student_id]||{}, pb=state.profiles[b.student_id]||{};
-      return (pa.full_name||'').localeCompare(pb.full_name||'','vi');
-    });
-    const body=list.map((d,i)=>{
-      const p=state.profiles[d.student_id]||{};
-      const evs=state.evidence.filter(e=>e.dossier_id===d.id);
-      return `<tr><td style="vertical-align:top;text-align:center">${i+1}</td>`
-        + `<td style="text-align:left;vertical-align:top">${bthInfoBlock(p)}</td>`
-        + crits.map(c=>`<td style="text-align:left;vertical-align:top;font-size:13px">${bthAchCell(evs,c.id)}</td>`).join('')
-        + `</tr>`;
-    }).join('');
-    const label = k===KHOA_OTHER ? 'Khác / chưa chọn Khoa-Viện' : k;
-    return `<h4 class="sec-h" style="margin-top:16px">🏛 ${esc(label)} (${list.length})</h4>`
-      + `<table class="stat-table" style="margin-top:6px">${head}${body}</table>`;
+  return groups;
+}
+function khoaOptionLabel(k){ return k===KHOA_OTHER ? 'Khác / chưa chọn Khoa-Viện' : k }
+/* Đổ danh sách Khoa/Viện có dữ liệu vào ô dropdown #th-khoa, giữ nguyên lựa
+   chọn cũ nếu vẫn còn hợp lệ. Trả về giá trị Khoa/Viện đang được chọn. */
+function populateThKhoaSelect(level){
+  const sel=$('th-khoa'); if(!sel) return '';
+  const groups=bangTongHopGroups(level);
+  const order=KHOA_LIST.filter(k=>groups[k]&&groups[k].length)
+    .concat(groups[KHOA_OTHER]&&groups[KHOA_OTHER].length ? [KHOA_OTHER] : []);
+  const prev=sel.value;
+  sel.innerHTML = order.length
+    ? order.map(k=>`<option value="${esc(k)}">${esc(khoaOptionLabel(k))} (${groups[k].length})</option>`).join('')
+    : '<option value="">— Chưa có dữ liệu —</option>';
+  sel.value = order.includes(prev) ? prev : (order[0]||'');
+  return sel.value;
+}
+function bangTongHopHtml(level,khoa){
+  const groups=bangTongHopGroups(level);
+  const list=(groups[khoa]||[]).slice().sort((a,b)=>{
+    const pa=state.profiles[a.student_id]||{}, pb=state.profiles[b.student_id]||{};
+    return (pa.full_name||'').localeCompare(pb.full_name||'','vi');
+  });
+  if(!list.length) return '<p class="empty">Chưa có sinh viên nào của Khoa/Viện này ở cấp đang xem trong năm học hiện tại.</p>';
+  const crits=critsFor(level);
+  const head=`<thead><tr><th style="width:46px">STT</th><th style="text-align:left;width:230px">Thông tin chung về sinh viên</th>`
+    +crits.map(c=>`<th style="width:200px">${esc(c.port||c.name)}</th>`).join('')+`</tr></thead>`;
+  const body=list.map((d,i)=>{
+    const p=state.profiles[d.student_id]||{};
+    const evs=state.evidence.filter(e=>e.dossier_id===d.id);
+    return `<tr><td style="text-align:center">${i+1}</td>`
+      + `<td style="text-align:left">${bthInfoBlock(p)}</td>`
+      + crits.map(c=>`<td style="text-align:left;font-size:13px">${bthAchCell(evs,c.id)}</td>`).join('')
+      + `</tr>`;
   }).join('');
+  return `<table class="stat-table bang-table"><colgroup><col style="width:46px"><col style="width:230px">`
+    + crits.map(()=>`<col style="width:200px">`).join('')
+    + `</colgroup>${head}<tbody>${body}</tbody></table>`;
+}
+/* Chỉ vẽ lại bảng tổng hợp (khi đổi Khoa/Viện) — không đụng tới danh sách công nhận */
+function renderBangTongHopOnly(){
+  const level=$('th-level').value;
+  const bb=$('thBangBox'); if(!bb) return;
+  const kh=$('th-khoa') ? $('th-khoa').value : '';
+  bb.innerHTML = kh ? bangTongHopHtml(level,kh) : '<p class="empty">Chưa có hồ sơ cá nhân nào ở cấp này trong năm học đang xem.</p>';
 }
 function switchThSubTab(which){
   const list = which==='list';
@@ -2303,7 +2338,10 @@ function renderTongHop(){
     + '<div style="height:20px"></div>'
     + thBlock(level,'tap_the');
   const bb=$('thBangBox');
-  if(bb) bb.innerHTML = bangTongHopHtml(level);
+  if(bb){
+    const kh=populateThKhoaSelect(level);
+    bb.innerHTML = kh ? bangTongHopHtml(level,kh) : '<p class="empty">Chưa có hồ sơ cá nhân nào ở cấp này trong năm học đang xem.</p>';
+  }
 }
 function csvCell(v){ v=String(v??''); return '"'+v.replace(/"/g,'""')+'"' }
 function exportTongHop(loai){
