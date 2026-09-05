@@ -2330,8 +2330,6 @@ function switchThSubTab(which){
 function renderTongHop(){
   const level=$('th-level').value;
   $('thHint').innerHTML = level==='truong'
-    ? `Danh sách đạt danh hiệu <b>cấp Trường</b> — dùng khi <b>trao giấy chứng nhận bản cứng trực tiếp</b> (không cần hồ sơ bản cứng). Danh sách <b>cá nhân</b> và <b>tập thể</b> được tách riêng, xuất CSV riêng từng loại.`
-    : `Danh sách đạt danh hiệu <b>cấp Thành phố</b> — theo dõi việc thu <b>hồ sơ bản cứng</b>. Danh sách <b>cá nhân</b> và <b>tập thể</b> được tách riêng, xuất CSV riêng từng loại.`;
   $('thBox').innerHTML = thBlock(level,'ca_nhan')
     + '<div style="height:20px"></div>'
     + thBlock(level,'tap_the');
