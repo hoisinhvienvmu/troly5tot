@@ -2815,20 +2815,47 @@ async function loadStudentData(){
     state.activeDossierId=pref?pref.id:null;
   }
 }
-async function loadOfficerData(){
+async function loadOfficerData() {
   await loadNamHoc();
-  const [pr,doss,ev,req,dk]=await Promise.all([
-    fetchAllRows(()=>sb.from('profiles').select('*')),
-    fetchAllRows(()=>sb.from('dossiers').select('*').order('submitted_at',{ascending:false})),
-    fetchAllRows(()=>sb.from('evidence').select('*').order('created_at',{ascending:false}).order('id',{ascending:false})),
-    fetchAllRows(()=>sb.from('yeu_cau_dai_dien').select('*').order('created_at',{ascending:false})),
-    fetchAllRows(()=>sb.from('dang_ky_phan_dau').select('*'))
+  const cy = viewCycle();
+  const myRole = state.me.role;
+  const myKhoaStr = state.me.khoa_quan_ly;
+
+  // 1. Xây dựng Query động: Ép Database tự lọc từ sớm (chỉ lấy dữ liệu năm học hiện tại)
+  let qProf = sb.from('profiles').select('*');
+  let qDoss = sb.from('dossiers').select('*').eq('cycle', cy).order('submitted_at', {ascending: false});
+  
+  // Dùng inner join để lọc minh chứng dựa trên 'cycle' của bảng dossiers
+  let qEv = sb.from('evidence').select('*, dossiers!inner(cycle)').eq('dossiers.cycle', cy).order('created_at', {ascending: false});
+  let qReq = sb.from('yeu_cau_dai_dien').select('*').order('created_at', {ascending: false});
+  let qDk = sb.from('dang_ky_phan_dau').select('*').eq('cycle', cy);
+
+  // 2. Nếu là Cán bộ Khoa: Cắt giảm tiếp 90% dữ liệu (chỉ lấy của Khoa mình)
+  if (myRole === 'khoa_officer' && myKhoaStr) {
+    qProf = qProf.eq('khoa', myKhoaStr);
+    qDoss = qDoss.eq('profiles.khoa', myKhoaStr).select('*, profiles!inner(khoa)');
+    qEv = qEv.eq('profiles.khoa', myKhoaStr).select('*, dossiers!inner(cycle), profiles!inner(khoa)');
+    qReq = qReq.eq('khoa', myKhoaStr);
+    qDk = qDk.eq('profiles.khoa', myKhoaStr).select('*, profiles!inner(khoa)');
+  }
+
+  // 3. Thực thi kéo dữ liệu song song (dữ liệu lúc này đã rất nhẹ)
+  const [pr, doss, ev, req, dk] = await Promise.all([
+    fetchAllRows(() => qProf),
+    fetchAllRows(() => qDoss),
+    fetchAllRows(() => qEv),
+    fetchAllRows(() => qReq),
+    fetchAllRows(() => qDk)
   ]);
-  state.profiles={}; pr.forEach(p=>state.profiles[p.id]=p);
-  state.dossiers=doss;
-  state.evidence=ev;
-  state.requests=req;
-  state.dangKy=dk;
+
+  // 4. Cập nhật state (Dọn dẹp các object thừa sinh ra do inner join để không làm vỡ UI)
+  state.profiles = {}; 
+  pr.forEach(p => state.profiles[p.id] = p);
+  
+  state.dossiers = doss.map(d => { delete d.profiles; return d; });
+  state.evidence = ev.map(e => { delete e.dossiers; delete e.profiles; return e; });
+  state.requests = req;
+  state.dangKy = dk.map(d => { delete d.profiles; return d; });
 }
 /* Danh sách năm học + năm học đang mở */
 async function loadNamHoc(){
